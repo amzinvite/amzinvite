@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bienvenue sur amzinvite</title>
+    <style>
+      :root {
+        --bg: #f6f7fb; --surface: #fff; --text: #0f172a;
+        --muted: #64748b; --border: #ebedf3; --accent: #4f46e5;
+        --brand: #111827; --green: #047857; --amber: #b45309;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #0f1115; --surface: #181b22; --text: #e6e8ee;
+          --muted: #8b91a0; --border: #262a33; --brand: #e6e8ee;
+          --green: #34d399; --amber: #fbbf24; --accent: #818cf8; }
+      }
+      * { box-sizing: border-box; }
+      body {
+        font: 15px/1.65 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+        margin: 0; background: var(--bg); color: var(--text);
+        -webkit-font-smoothing: antialiased;
+      }
+      .container { max-width: 600px; margin: 0 auto; padding: 60px 28px 80px; }
+      h1 { font-size: 32px; letter-spacing: -0.025em; margin: 0 0 12px; font-weight: 800; }
+      .lede { color: var(--muted); font-size: 16px; margin: 0 0 36px; }
+      .step {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 12px; padding: 20px 22px; margin-bottom: 16px;
+        display: flex; gap: 18px; align-items: flex-start;
+      }
+      .step .num {
+        flex: 0 0 36px; height: 36px;
+        background: var(--brand); color: var(--bg);
+        border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 16px;
+      }
+      .step h3 { margin: 0 0 6px; font-size: 17px; }
+      .step p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+      .step strong { color: var(--text); font-weight: 600; }
+      .callout {
+        margin: 30px 0 0; padding: 14px 18px;
+        background: #fef3c7; border-left: 3px solid var(--amber);
+        border-radius: 8px; font-size: 14px; color: #78350f;
+      }
+      @media (prefers-color-scheme: dark) {
+        .callout { background: #3a2410; color: #fbbf24; }
+      }
+      .cta {
+        display: block; width: 100%; margin-top: 30px;
+        padding: 14px 20px; background: var(--brand); color: var(--bg);
+        border: none; border-radius: 10px; font-size: 15px; font-weight: 600;
+        cursor: pointer; transition: filter 0.12s;
+      }
+      .cta:hover { filter: brightness(1.15); }
+      footer {
+        margin-top: 40px; padding-top: 24px;
+        border-top: 1px solid var(--border);
+        text-align: center; color: var(--muted); font-size: 13px;
+      }
+      footer a { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎟️ Bienvenue sur amzinvite</h1>
+      <p class="lede">
+        Le tracker d'invitations Amazon France. On surveille pour toi, on te
+        prévient dès qu'un produit s'ouvre ou que tu es sélectionné.
+      </p>
+
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h3>Tu n'as rien à configurer</h3>
+          <p>L'extension récupère automatiquement la liste des produits actuellement en mode invitation depuis notre catalogue communautaire. Aucun compte, aucun token.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h3>Suivi en arrière-plan</h3>
+          <p>Toutes les 30 minutes, l'extension vérifie l'état de chaque produit. Tu reçois une <strong>notification Chrome</strong> quand un produit passe à "dispo" ou que tu es <strong>sélectionné</strong>.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h3>Auto-demander (optionnel)</h3>
+          <p>Active "Auto-demander les invitations" dans les paramètres pour que l'extension envoie la demande automatiquement dès qu'un produit s'ouvre. <strong>OFF par défaut</strong> — peut violer les TOS Amazon, à tes risques.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">4</div>
+        <div>
+          <h3>Privacy</h3>
+          <p>Toutes tes données restent dans ton navigateur. Aucune info perso ne quitte ta machine. Tu peux <strong>opt-in</strong> au partage anonyme (UUID) pour améliorer le catalogue communautaire. <a href="https://amzinvite.example.com/privacy" target="_blank">Lire la privacy policy</a>.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Important :</strong> cette extension n'est pas affiliée à Amazon. L'utilisation
+        d'outils d'automatisation peut être contraire aux conditions d'utilisation Amazon.
+        Utilise l'auto-request à tes risques.
+      </div>
+
+      <button class="cta" id="close">C'est parti — ouvre l'extension dans la barre d'outils</button>
+
+      <footer>
+        <a href="https://github.com/yourname/amzinvite" target="_blank">GitHub</a>
+        &nbsp;·&nbsp;
+        <a href="https://amzinvite.example.com/privacy" target="_blank">Privacy</a>
+      </footer>
+    </div>
+    <script>
+      document.getElementById("close").addEventListener("click", () => window.close());
+    </script>
+  </body>
+</html>

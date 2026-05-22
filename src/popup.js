@@ -2,6 +2,8 @@ const $ = (id) => document.getElementById(id);
 
 let nextCheckTimer = null;
 let activeFilter = "all";
+let currentItems = [];
+let currentLastRun = null;
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
@@ -177,14 +179,15 @@ function renderCheckProgress(progress) {
 }
 
 function renderHeader(items, lastRun) {
-  const counts = { available: 0, already_requested: 0, accepted: 0 };
+  const counts = { accepted: 0, to_review: 0 };
   for (const item of items) {
     const state = item.known_state || "unknown";
-    if (state in counts) counts[state]++;
+    if (state === "accepted") counts.accepted++;
+    if (state === "unknown" || state === "stub_no_data") counts.to_review++;
   }
 
-  $("stat-available").textContent = counts.available + counts.accepted;
-  $("stat-requested").textContent = counts.already_requested;
+  $("stat-available").textContent = counts.accepted;
+  $("stat-requested").textContent = counts.to_review;
   $("stat-total").textContent = items.length;
 
   if (lastRun) {
@@ -219,12 +222,23 @@ async function refreshList(lastRun, showAllOverride) {
   if (!lastRun) {
     lastRun = (await chrome.storage.local.get("lastRun")).lastRun;
   }
+  currentItems = res.items || [];
+  currentLastRun = lastRun || null;
   const showAll = typeof showAllOverride === "boolean"
     ? showAllOverride
     : !!(await chrome.storage.local.get("showAll")).showAll;
 
-  renderList(res.items, showAll);
-  renderHeader(res.items, lastRun);
+  renderList(currentItems, showAll);
+  renderHeader(currentItems, currentLastRun);
+  renderStatFilter();
+}
+
+async function rerenderCurrentList(showAllOverride) {
+  const showAll = typeof showAllOverride === "boolean"
+    ? showAllOverride
+    : !!(await chrome.storage.local.get("showAll")).showAll;
+  renderList(currentItems, showAll);
+  renderHeader(currentItems, currentLastRun);
   renderStatFilter();
 }
 
@@ -270,16 +284,18 @@ function formatCountdown(ms) {
 }
 
 function renderEmpty(visible) {
-  $("list").innerHTML = "";
+  if (visible) {
+    $("list").innerHTML = "";
+  }
   $("empty").classList.toggle("visible", visible);
 }
 
 function renderEmptyContent() {
   const empty = $("empty");
-  if (activeFilter === "available") {
+  if (activeFilter === "buyable") {
     empty.innerHTML = `
       <span class="big">🎟️</span>
-      Aucun produit disponible à afficher pour l’instant.<br />
+      Aucun produit achetable à afficher pour l’instant.<br />
       Active POKÉMON TCG FR pour charger le suivi automatique.
       <div style="margin-top:12px">
         <button class="button-link inline-primary" id="enablePokemonFromEmpty" type="button">Activer POKÉMON TCG FR</button>
@@ -296,10 +312,10 @@ function renderEmptyContent() {
     return;
   }
 
-  if (activeFilter === "already_requested") {
+  if (activeFilter === "to_review") {
     empty.innerHTML = `
-      <span class="big">🗂️</span>
-      Aucune invitation déjà demandée à afficher.
+      <span class="big">🧐</span>
+      Aucun produit à vérifier pour l’instant.
     `;
     return;
   }
@@ -337,7 +353,8 @@ function renderList(items, showAll) {
     const state = item.known_state || "unknown";
     const matchesFilter =
       activeFilter === "all"
-      || (activeFilter === "available" && (state === "available" || state === "accepted"))
+      || (activeFilter === "buyable" && state === "accepted")
+      || (activeFilter === "to_review" && (state === "unknown" || state === "stub_no_data"))
       || state === activeFilter;
 
     if (!matchesFilter) continue;
@@ -409,7 +426,7 @@ $("toggle-settings").addEventListener("click", () => {
 $("toggle-hidden").addEventListener("click", async () => {
   const next = !((await chrome.storage.local.get("showAll")).showAll);
   await chrome.storage.local.set({ showAll: next });
-  await refreshList(undefined, next);
+  await rerenderCurrentList(next);
 });
 
 $("intervalMin").addEventListener("change", async () => {
@@ -507,7 +524,7 @@ document.querySelectorAll(".stat[data-filter]").forEach((el) => {
   el.addEventListener("click", async () => {
     activeFilter = el.dataset.filter || "all";
     await chrome.storage.local.set({ showAll: true });
-    await refreshList();
+    await rerenderCurrentList(true);
   });
 });
 

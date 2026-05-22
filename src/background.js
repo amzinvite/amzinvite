@@ -125,7 +125,17 @@ async function getWatchlist() {
   }
   const custom = (customUrls || []).map((u) => ({ url: u, name: shortPath(u), custom: true }));
   const states = knownStates || {};
-  const all = [...feed, ...custom];
+  const deduped = new Map();
+  for (const item of feed) {
+    const asin = asinFromUrl(item.url);
+    deduped.set(asin || item.url, item);
+  }
+  for (const item of custom) {
+    const asin = asinFromUrl(item.url);
+    // Les ajouts manuels priment si l'ASIN existe déjà dans le feed.
+    deduped.set(asin || item.url, item);
+  }
+  const all = [...deduped.values()];
   // Attache l'état connu local à chaque item
   return all.map((it) => ({
     ...it,

@@ -9,7 +9,7 @@
     "*://*.amazon.com/*",
     "*://data.amazon.fr/*",
     "*://data.amazon.com/*",
-    "https://amzinvite.example.com/*"
+    "https://amzinvite-api.amzinvite.workers.dev/*"
   ],
   "background": {
     "service_worker": "background.js",

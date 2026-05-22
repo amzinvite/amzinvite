@@ -20,8 +20,8 @@ import { detectInvitationState, extractBuyboxText } from "./detector.js";
 // ─────────────────────────────────────────────────────────────────────────
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────
-const API_BASE = "https://amzinvite.example.com"; // ← à remplacer en build
-const HMAC_SECRET = "REPLACE_ME_BEFORE_BUILD";    // ← à remplacer en build
+const API_BASE = "https://amzinvite-api.amzinvite.workers.dev";
+const HMAC_SECRET = "0b950ea0a74ecd36f73218b7aef389bfe610e6053fe85371ddf4f351ff2ce89a";
 const ALARM_NAME = "invitation-check";
 const DEFAULT_INTERVAL_MIN = 30;
 const PER_REQUEST_DELAY_MS = 20_000;

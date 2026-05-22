@@ -31,7 +31,6 @@ const FEED_REFRESH_MS = 30 * 60 * 1000; // 30 min
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const BUYABLE_BADGE_BG = "#1D7A52";
-const POKEMON_TCG_FR_RE = /\bpok[ée]mon\b/i;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Identifiant d'instance anonyme — généré au premier lancement
@@ -123,7 +122,6 @@ async function getWatchlist() {
       try { feed = await refreshPublicFeed(); }
       catch (e) { console.warn("[amzinvite] feed refresh failed:", e); }
     }
-    feed = feed.filter((it) => isPokemonTcgFrProduct(it));
   }
   const custom = (customUrls || []).map((u) => ({ url: u, name: shortPath(u), custom: true }));
   const states = knownStates || {};
@@ -133,11 +131,6 @@ async function getWatchlist() {
     ...it,
     known_state: states[asinFromUrl(it.url)] || null,
   }));
-}
-
-function isPokemonTcgFrProduct(item) {
-  const name = String(item?.name || "");
-  return POKEMON_TCG_FR_RE.test(name);
 }
 
 async function updateActionBadge(items = null) {

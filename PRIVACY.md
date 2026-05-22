@@ -37,6 +37,7 @@ Par défaut, amzinvite ne suit aucun produit automatiquement. Tu peux :
 
 1. ajouter des liens Amazon manuellement
 2. activer le suivi automatique POKÉMON TCG FR
+3. charger le feed public correspondant quand cette option est activée
 
 ## Données envoyées à Amazon
 

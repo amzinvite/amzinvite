@@ -38,6 +38,7 @@ Lien à venir.
 - sans option activée, l'extension ne suit rien automatiquement
 - tu peux ajouter un produit manuellement via son lien Amazon en mode invitation
 - tu peux activer le suivi automatique de POKÉMON TCG FR depuis les réglages
+- quand cette option est activée, l'extension charge et suit le feed public correspondant
 
 ## Confidentialité
 

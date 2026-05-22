@@ -368,6 +368,11 @@
         background: #ffd57a;
         color: #4a2d05;
       }
+      .button-link.inline-primary {
+        border-color: var(--brand);
+        background: linear-gradient(180deg, var(--brand), var(--brand-strong));
+        color: #fff8f3;
+      }
       .err {
         display: none;
         margin: 14px 16px 0;
@@ -630,11 +635,7 @@
           <button class="text-button" id="toggle-hidden" type="button" hidden>Afficher tout</button>
         </div>
         <ul class="products" id="list"></ul>
-        <div class="empty" id="empty">
-          <span class="big">📭</span>
-          Aucun produit utile à afficher pour l’instant.<br />
-          Active POKÉMON TCG FR ou ajoute un lien Amazon en invitation.
-        </div>
+        <div class="empty" id="empty"></div>
 
         <div class="footer-actions">
           <a href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a>

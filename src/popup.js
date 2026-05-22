@@ -274,6 +274,43 @@ function renderEmpty(visible) {
   $("empty").classList.toggle("visible", visible);
 }
 
+function renderEmptyContent() {
+  const empty = $("empty");
+  if (activeFilter === "available") {
+    empty.innerHTML = `
+      <span class="big">🎟️</span>
+      Aucun produit disponible à afficher pour l’instant.<br />
+      Active POKÉMON TCG FR pour charger le suivi automatique.
+      <div style="margin-top:12px">
+        <button class="button-link inline-primary" id="enablePokemonFromEmpty" type="button">Activer POKÉMON TCG FR</button>
+      </div>
+    `;
+    const btn = $("enablePokemonFromEmpty");
+    if (btn) {
+      btn.addEventListener("click", async () => {
+        setChecked("trackPokemonTcgFr", true);
+        $("settings").classList.add("open");
+        $("trackPokemonTcgFr").dispatchEvent(new Event("change"));
+      });
+    }
+    return;
+  }
+
+  if (activeFilter === "already_requested") {
+    empty.innerHTML = `
+      <span class="big">🗂️</span>
+      Aucune invitation déjà demandée à afficher.
+    `;
+    return;
+  }
+
+  empty.innerHTML = `
+    <span class="big">📭</span>
+    Aucun produit suivi à afficher pour l’instant.<br />
+    Active POKÉMON TCG FR ou ajoute un lien Amazon en invitation.
+  `;
+}
+
 function renderList(items, showAll) {
   const list = $("list");
   list.innerHTML = "";
@@ -281,6 +318,7 @@ function renderList(items, showAll) {
   if (!items.length) {
     $("list-title").textContent = "Suivi";
     $("toggle-hidden").hidden = true;
+    renderEmptyContent();
     renderEmpty(true);
     return;
   }
@@ -359,11 +397,7 @@ function renderList(items, showAll) {
     `;
     renderEmpty(true);
   } else {
-    $("empty").innerHTML = `
-      <span class="big">📭</span>
-      Aucun produit utile à afficher pour l’instant.<br />
-      Active POKÉMON TCG FR ou ajoute un lien Amazon en invitation.
-    `;
+    renderEmptyContent();
     renderEmpty(rendered === 0);
   }
 }
@@ -393,6 +427,8 @@ $("communityDataEnabled").addEventListener("change", async () => {
 
 $("trackPokemonTcgFr").addEventListener("change", async () => {
   await persistSettings();
+  activeFilter = "all";
+  await chrome.storage.local.set({ showAll: true });
   if ($("trackPokemonTcgFr").checked) {
     await sendMessage({ type: "refresh-public-feed" });
   } else {
@@ -470,12 +506,11 @@ $("check").addEventListener("click", async () => {
 document.querySelectorAll(".stat[data-filter]").forEach((el) => {
   el.addEventListener("click", async () => {
     activeFilter = el.dataset.filter || "all";
-    if (activeFilter !== "all") {
-      await chrome.storage.local.set({ showAll: true });
-    }
+    await chrome.storage.local.set({ showAll: true });
     await refreshList();
   });
 });
+
 
 window.addEventListener("beforeunload", stopNextCheckTimer);
 

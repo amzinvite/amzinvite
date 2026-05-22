@@ -123,7 +123,7 @@ async function getWatchlist() {
       catch (e) { console.warn("[amzinvite] feed refresh failed:", e); }
     }
   }
-  const custom = (customUrls || []).map((u) => ({ url: u, name: shortPath(u), custom: true }));
+  const custom = (customUrls || []).map((entry) => normalizeCustomEntry(entry));
   const states = knownStates || {};
   const deduped = new Map();
   for (const item of feed) {
@@ -194,6 +194,31 @@ function normalizeAmazonProductUrl(url) {
 function shortPath(url) {
   const asin = asinFromUrl(url);
   return asin ? `/dp/${asin}` : url;
+}
+
+function normalizeCustomEntry(entry) {
+  if (typeof entry === "string") {
+    return { url: entry, name: shortPath(entry), custom: true };
+  }
+  const url = entry?.url || "";
+  return {
+    url,
+    name: entry?.name || shortPath(url),
+    custom: true,
+  };
+}
+
+function extractProductNameFromHtml(html) {
+  if (!html) return null;
+  const titleMatch = html.match(/id="productTitle"[^>]*>\s*([^<]+?)\s*</i);
+  if (titleMatch?.[1]) return titleMatch[1].replace(/\s+/g, " ").trim();
+  const docTitleMatch = html.match(/<title>\s*([^<]+?)\s*<\/title>/i);
+  if (!docTitleMatch?.[1]) return null;
+  return docTitleMatch[1]
+    .replace(/\s*:\s*Amazon\.[^|]+.*$/i, "")
+    .replace(/\s*-\s*Amazon\.[^|]+.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -539,24 +564,33 @@ async function validateInvitationProductUrl(url) {
   if (state === "not_invitation") {
     throw new Error("Ce produit n'est pas actuellement en mode invitation.");
   }
-  return { normalizedUrl, state };
+  return { normalizedUrl, state, name: extractProductNameFromHtml(html) || shortPath(normalizedUrl) };
 }
 
 async function addCustomUrl(url) {
-  const { normalizedUrl, state } = await validateInvitationProductUrl(url);
-  const { customUrls } = await chrome.storage.local.get("customUrls");
-  const set = new Set(customUrls || []);
-  set.add(normalizedUrl);
-  await chrome.storage.local.set({ customUrls: [...set] });
+  const { normalizedUrl, state, name } = await validateInvitationProductUrl(url);
+  const asin = asinFromUrl(normalizedUrl);
+  const { customUrls, publicFeed } = await chrome.storage.local.get(["customUrls", "publicFeed"]);
+  const normalizedCustom = (customUrls || []).map((entry) => normalizeCustomEntry(entry));
+  if (normalizedCustom.some((entry) => entry.url === normalizedUrl)) {
+    return { url: normalizedUrl, state, added: false, reason: "already_custom" };
+  }
+  const alreadyInFeed = (publicFeed || []).some((item) => asinFromUrl(item.url) === asin);
+  if (alreadyInFeed) {
+    return { url: normalizedUrl, state, added: false, reason: "already_feed" };
+  }
+  normalizedCustom.push({ url: normalizedUrl, name });
+  await chrome.storage.local.set({ customUrls: normalizedCustom });
   await setKnownState(normalizedUrl, state);
   await updateActionBadge();
-  return { url: normalizedUrl, state };
+  return { url: normalizedUrl, state, added: true };
 }
 
 async function removeCustomUrl(url) {
   const { customUrls } = await chrome.storage.local.get("customUrls");
+  const normalizedCustom = (customUrls || []).map((entry) => normalizeCustomEntry(entry));
   await chrome.storage.local.set({
-    customUrls: (customUrls || []).filter((u) => u !== url),
+    customUrls: normalizedCustom.filter((entry) => entry.url !== url),
   });
   await updateActionBadge();
 }

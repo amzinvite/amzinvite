@@ -53,7 +53,7 @@ async function getSettings() {
     intervalMin: cfg.intervalMin || DEFAULT_INTERVAL_MIN,
     autoRequest: !!cfg.autoRequest,
     telemetryEnabled: !!cfg.telemetryEnabled,
-    scrapeEnabled: !!cfg.scrapeEnabled,
+    scrapeEnabled: cfg.scrapeEnabled !== false,
   };
 }
 
@@ -129,6 +129,23 @@ function asinFromUrl(url) {
     const m = new URL(url).pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
     return m ? m[1].toUpperCase() : null;
   } catch { return null; }
+}
+
+function normalizeAmazonProductUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("URL invalide.");
+  }
+  if (!/(^|\.)amazon\./i.test(parsed.hostname)) {
+    throw new Error("Le lien doit pointer vers un produit Amazon.");
+  }
+  const asin = asinFromUrl(parsed.href);
+  if (!asin) {
+    throw new Error("URL invalide : format /dp/ASIN ou /gp/product/ASIN attendu.");
+  }
+  return `${parsed.origin}/dp/${asin}`;
 }
 
 function shortPath(url) {
@@ -333,11 +350,29 @@ async function setupOriginRewrite() {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   scheduleAlarm();
   setupOriginRewrite();
+
+  const existing = await chrome.storage.local.get([
+    "intervalMin",
+    "autoRequest",
+    "telemetryEnabled",
+    "scrapeEnabled",
+    "showAll",
+  ]);
+  const defaults = {};
+  if (existing.intervalMin == null) defaults.intervalMin = DEFAULT_INTERVAL_MIN;
+  if (existing.autoRequest == null) defaults.autoRequest = false;
+  if (existing.telemetryEnabled == null) defaults.telemetryEnabled = false;
+  if (existing.scrapeEnabled == null) defaults.scrapeEnabled = true;
+  if (existing.showAll == null) defaults.showAll = false;
+  if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
+
   // Ouvre la page d'onboarding au premier install
-  chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+  if (details.reason === "install") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+  }
 });
 chrome.runtime.onStartup.addListener(() => {
   scheduleAlarm();
@@ -390,7 +425,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
   if (msg?.type === "add-custom-url") {
-    addCustomUrl(msg.url).then(() => sendResponse({ ok: true })).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    addCustomUrl(msg.url)
+      .then((res) => sendResponse({ ok: true, ...res }))
+      .catch((e) => sendResponse({ ok: false, error: String(e.message || e) }));
     return true;
   }
   if (msg?.type === "remove-custom-url") {
@@ -407,11 +444,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+async function validateInvitationProductUrl(url) {
+  const normalizedUrl = normalizeAmazonProductUrl(url);
+  const html = await fetchAmazonPage(normalizedUrl);
+  if (isStub(html)) {
+    throw new Error("Amazon a renvoye une page incomplete. Reessaie dans quelques secondes.");
+  }
+  const { text, doc, rawHtml } = extractBuyboxText(html);
+  const state = detectInvitationState(text, doc, rawHtml);
+  if (state === "not_invitation") {
+    throw new Error("Ce produit n'est pas actuellement en mode invitation.");
+  }
+  return { normalizedUrl, state };
+}
+
 async function addCustomUrl(url) {
+  const { normalizedUrl, state } = await validateInvitationProductUrl(url);
   const { customUrls } = await chrome.storage.local.get("customUrls");
   const set = new Set(customUrls || []);
-  set.add(url);
+  set.add(normalizedUrl);
   await chrome.storage.local.set({ customUrls: [...set] });
+  await setKnownState(normalizedUrl, state);
+  return { url: normalizedUrl, state };
 }
 
 async function removeCustomUrl(url) {

@@ -5,300 +5,635 @@
     <title>amzinvite</title>
     <style>
       :root {
-        --bg: #f6f7fb;
-        --surface: #ffffff;
-        --border: #ebedf3;
-        --border-strong: #d8dbe5;
-        --text: #0f172a;
-        --text-soft: #334155;
-        --muted: #64748b;
-        --brand: #111827;
-        --brand-soft: #f3f4f6;
-        --accent: #4f46e5;
-        --green: #047857;
-        --green-bg: #d1fae5;
-        --amber: #b45309;
-        --amber-bg: #fef3c7;
-        --blue: #1d4ed8;
-        --blue-bg: #dbeafe;
-        --gray: #475569;
-        --gray-bg: #f1f5f9;
-        --red: #b91c1c;
-        --red-bg: #fee2e2;
-        --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+        --bg: #f6ede8;
+        --surface: #fffaf6;
+        --surface-strong: #ffffff;
+        --border: #f0ddd4;
+        --border-strong: #d8b3a3;
+        --text: #2b1712;
+        --text-soft: #6f4a3f;
+        --muted: #97756a;
+        --brand: #b53a2c;
+        --brand-strong: #8f2219;
+        --brand-soft: #fde8e2;
+        --accent: #f3b16f;
+        --green: #1d7a52;
+        --green-bg: #e6f5ed;
+        --blue: #295fbe;
+        --blue-bg: #e7efff;
+        --amber: #9f5713;
+        --amber-bg: #fff0db;
+        --gray: #6f6a67;
+        --gray-bg: #f5efeb;
+        --red: #a43328;
+        --red-bg: #fde6e1;
+        --shadow-sm: 0 10px 24px rgba(113, 49, 33, 0.08);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0f1115; --surface: #181b22; --border: #262a33;
-          --border-strong: #343a47; --text: #e6e8ee; --text-soft: #c4c8d2;
-          --muted: #8b91a0; --brand: #e6e8ee; --brand-soft: #1f232c;
-          --accent: #818cf8; --green: #34d399; --green-bg: #052e1f;
-          --amber: #fbbf24; --amber-bg: #3a2410; --blue: #60a5fa;
-          --blue-bg: #0c2a3a; --gray: #94a3b8; --gray-bg: #1f232c;
-          --red: #f87171; --red-bg: #3f1414;
+          --bg: #140f0d;
+          --surface: #1e1715;
+          --surface-strong: #251c19;
+          --border: #342523;
+          --border-strong: #55352d;
+          --text: #f8ede7;
+          --text-soft: #d8b9ac;
+          --muted: #b48f81;
+          --brand: #ef6d5d;
+          --brand-strong: #ff8b73;
+          --brand-soft: #321d19;
+          --accent: #f0b062;
+          --green: #61d39a;
+          --green-bg: #11271d;
+          --blue: #85aef8;
+          --blue-bg: #15243d;
+          --amber: #f4bf79;
+          --amber-bg: #362414;
+          --gray: #b7aba6;
+          --gray-bg: #261f1d;
+          --red: #ff9a88;
+          --red-bg: #3a1c18;
+          --shadow-sm: 0 14px 30px rgba(0, 0, 0, 0.26);
         }
       }
       * { box-sizing: border-box; }
       body {
-        font: 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-        margin: 0; width: 400px;
-        background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+        margin: 0;
+        width: 392px;
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 34%),
+          linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg) 84%, #ffffff 16%));
+        color: var(--text);
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
-      header {
-        padding: 16px 18px 14px;
-        background: var(--surface);
+      a { color: inherit; }
+      .shell {
+        padding: 16px;
+      }
+      .panel {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background: color-mix(in srgb, var(--surface) 92%, white 8%);
+        box-shadow: var(--shadow-sm);
+      }
+      .hero {
+        padding: 18px 18px 16px;
+        background:
+          radial-gradient(circle at top right, rgba(243, 177, 111, 0.2), transparent 30%),
+          linear-gradient(180deg, color-mix(in srgb, var(--brand-soft) 70%, transparent), transparent 75%);
         border-bottom: 1px solid var(--border);
       }
-      header h1 {
-        margin: 0; font-size: 15px; font-weight: 700;
-        letter-spacing: -0.015em;
-        display: flex; align-items: center; gap: 9px;
+      .hero-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
       }
-      header h1 .logo {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 24px; height: 24px; background: var(--brand-soft);
-        border-radius: 7px; font-size: 13px;
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
-      header .sub { margin-top: 6px; font-size: 12px; color: var(--text-soft); font-weight: 500; }
-      header .meta { margin-top: 2px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-
-      section { padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
-      section.collapse-target { display: none; }
-      section.collapse-target.open { display: block; }
-
-      .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        display: block;
+        border-radius: 12px;
+        object-fit: cover;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: var(--surface-strong);
+        border: 1px solid var(--border);
+        color: var(--text-soft);
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .sub {
+        margin-top: 10px;
+        font-size: 12.5px;
+        color: var(--text-soft);
+        max-width: 270px;
+      }
+      .meta {
+        margin-top: 4px;
+        font-size: 10.5px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 14px 16px 0;
+      }
       .stat {
-        background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-        padding: 10px 6px; text-align: center; box-shadow: var(--shadow-sm);
+        padding: 12px 10px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--surface-strong);
+        text-align: left;
       }
-      .stat .n { font-size: 20px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-      .stat .l { font-size: 9.5px; color: var(--muted); margin-top: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-      .stat.ok .n { color: var(--green); }
-      .stat.warn .n { color: var(--amber); }
+      .stat .n {
+        display: block;
+        font-size: 21px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      .stat .l {
+        display: block;
+        margin-top: 6px;
+        font-size: 10.5px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-weight: 700;
+      }
+      .stat.warn .n { color: var(--brand); }
       .stat.info .n { color: var(--blue); }
-
-      label.field {
-        display: block; font-size: 10.5px; color: var(--muted);
-        margin-top: 12px; margin-bottom: 4px;
-        text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+      .status-wrap {
+        padding: 14px 16px 0;
       }
-      input[type="text"], input[type="number"], input[type="url"] {
-        width: 100%; padding: 9px 11px; font-size: 12.5px; font-family: inherit;
-        color: var(--text); background: var(--surface);
-        border: 1px solid var(--border-strong); border-radius: 8px;
-      }
-      input:focus { outline: none; border-color: var(--text); box-shadow: 0 0 0 3px var(--brand-soft); }
-
-      .toggle-row {
-        display: flex; align-items: flex-start; gap: 10px; margin-top: 14px;
-        padding: 12px; background: var(--brand-soft); border: 1px solid var(--border);
-        border-radius: 10px; cursor: pointer;
-      }
-      .toggle-row.warn { background: var(--amber-bg); border-color: var(--amber); }
-      .toggle-row input { margin: 2px 0 0; accent-color: var(--text); }
-      .toggle-row b { font-weight: 600; font-size: 12.5px; }
-      .toggle-row .hint { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; line-height: 1.45; }
-      .toggle-row.warn .hint { color: var(--amber); opacity: 0.9; }
-
-      .actions { display: flex; gap: 8px; margin-top: 14px; }
-      button {
-        flex: 1; padding: 10px 14px; font-size: 12.5px; font-weight: 600;
-        font-family: inherit; border: 1px solid var(--border-strong); border-radius: 9px;
-        background: var(--surface); color: var(--text); cursor: pointer;
-        transition: all 0.12s;
-      }
-      button:hover { background: var(--gray-bg); transform: translateY(-1px); }
-      button:disabled { opacity: 0.55; cursor: wait; transform: none; }
-      button.primary { background: var(--brand); color: var(--surface); border-color: var(--brand); }
-      button.ghost { flex: 0 0 auto; padding: 8px 12px; font-size: 13px; }
-      button.danger { background: var(--red-bg); color: var(--red); border-color: var(--red-bg); flex: 0 0 auto; padding: 7px 10px; font-size: 11px; }
-
       .status-line {
-        font-size: 11px; color: var(--muted); margin-top: 10px;
-        font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 13px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--surface-strong);
+        color: var(--text-soft);
+        font-size: 11.5px;
       }
       .status-line::before {
-        content: ""; width: 6px; height: 6px; border-radius: 50%;
-        background: var(--green); box-shadow: 0 0 8px var(--green);
-        animation: pulse 2.5s ease-in-out infinite;
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--brand);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 14%, transparent);
       }
-      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-
-      .list-header {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 10px 16px; background: var(--bg);
-        font-size: 10.5px; color: var(--muted);
-        text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        padding: 14px 16px 0;
       }
-      .show-all-toggle {
-        display: inline-flex; align-items: center; gap: 6px; font-size: 11px;
-        text-transform: none; letter-spacing: 0; font-weight: 500; cursor: pointer; color: var(--text-soft);
+      button,
+      .button-link {
+        appearance: none;
+        border: 1px solid var(--border-strong);
+        border-radius: 14px;
+        background: var(--surface-strong);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+        text-decoration: none;
+        transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
       }
-      .show-all-toggle input { margin: 0; accent-color: var(--text); }
-
-      ul.products { list-style: none; padding: 0; margin: 0; max-height: 340px; overflow-y: auto; background: var(--surface); }
-      li.product {
-        display: flex; align-items: center; gap: 10px;
-        padding: 11px 16px; border-bottom: 1px solid var(--border);
+      button:hover,
+      .button-link:hover {
+        transform: translateY(-1px);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+        transform: none;
+      }
+      .primary {
+        min-height: 46px;
+        padding: 0 16px;
+        border-color: var(--brand);
+        background: linear-gradient(180deg, var(--brand), var(--brand-strong));
+        color: #fff8f3;
+        font-weight: 700;
+      }
+      .ghost {
+        width: 46px;
+        height: 46px;
+        padding: 0;
+        font-size: 16px;
+      }
+      .section {
+        padding: 16px;
+      }
+      .collapse-target {
+        display: none;
+        border-top: 1px solid var(--border);
+      }
+      .collapse-target.open {
+        display: block;
+      }
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+      .card {
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface-strong);
+      }
+      .card-title {
+        margin: 0 0 5px;
+        font-size: 12.5px;
+        font-weight: 700;
+      }
+      .card-copy {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11.5px;
+        line-height: 1.5;
+      }
+      .field {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      input[type="text"],
+      input[type="number"],
+      input[type="url"] {
+        width: 100%;
+        min-height: 42px;
+        padding: 10px 12px;
+        border: 1px solid var(--border-strong);
+        border-radius: 12px;
         background: var(--surface);
+        color: var(--text);
+        font: inherit;
       }
-      li.product:hover { background: var(--bg); }
-      li.product:last-child { border-bottom: none; }
-      li.product .body { flex: 1; min-width: 0; }
-      li.product .name {
-        font-size: 12.5px; font-weight: 500; line-height: 1.35; color: var(--text);
-        overflow: hidden; text-overflow: ellipsis;
-        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      input:focus {
+        outline: none;
+        border-color: var(--brand);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 14%, transparent);
       }
-      li.product .link { font-size: 10.5px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
-      li.product a { color: inherit; text-decoration: none; }
-      li.product a:hover { color: var(--text); text-decoration: underline; }
-      li.product .remove {
-        background: transparent; border: none; color: var(--muted);
-        cursor: pointer; padding: 4px 6px; font-size: 14px; flex: 0;
-        border-radius: 4px;
+      .inline-form {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
       }
-      li.product .remove:hover { background: var(--red-bg); color: var(--red); transform: none; }
-
+      .inline-form button {
+        min-width: 92px;
+        padding: 0 14px;
+      }
+      .inline-field {
+        display: grid;
+        grid-template-columns: 1fr 96px;
+        gap: 8px;
+        align-items: end;
+      }
+      .toggle-row {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 13px 14px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface-strong);
+        cursor: pointer;
+      }
+      .toggle-row input {
+        margin: 2px 0 0;
+        accent-color: var(--brand);
+      }
+      .toggle-row b {
+        display: block;
+        font-size: 12.5px;
+        line-height: 1.35;
+      }
+      .toggle-row .hint {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      .auto-note {
+        display: none;
+        padding: 11px 12px;
+        border-radius: 12px;
+        background: var(--amber-bg);
+        color: var(--amber);
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      .auto-note.open {
+        display: block;
+      }
+      .mini-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .mini-actions .button-link,
+      .mini-actions button {
+        flex: 1;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 12px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .button-link.support {
+        border-color: #e0b766;
+        background: #ffd57a;
+        color: #4a2d05;
+      }
+      .err {
+        display: none;
+        margin: 14px 16px 0;
+        padding: 11px 12px;
+        border-radius: 14px;
+        background: var(--red-bg);
+        color: var(--red);
+        font-size: 11.5px;
+        line-height: 1.45;
+      }
+      .err.visible {
+        display: block;
+      }
+      .list-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px;
+      }
+      .list-title {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--muted);
+      }
+      .text-button {
+        border: none;
+        background: transparent;
+        color: var(--text-soft);
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 0;
+      }
+      .text-button:hover {
+        color: var(--brand);
+        transform: none;
+      }
+      ul.products {
+        list-style: none;
+        padding: 0 10px 10px;
+        margin: 0;
+        max-height: 326px;
+        overflow-y: auto;
+      }
+      li.product {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface-strong);
+        margin-bottom: 8px;
+      }
+      li.product:last-child {
+        margin-bottom: 0;
+      }
       li.product:has(.pill.accepted) {
-        background: linear-gradient(90deg, color-mix(in srgb, var(--green-bg) 60%, transparent), transparent);
-        border-left: 3px solid var(--green); padding-left: 13px;
+        border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+        background: linear-gradient(90deg, color-mix(in srgb, var(--green-bg) 75%, transparent), transparent);
       }
-      li.product:has(.pill.accepted) .name { font-weight: 600; }
-
+      .body {
+        flex: 1;
+        min-width: 0;
+      }
+      .name {
+        font-size: 12.5px;
+        font-weight: 600;
+        line-height: 1.35;
+        color: var(--text);
+        display: -webkit-box;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+      .link {
+        margin-top: 4px;
+        font-size: 10.5px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .link a {
+        text-decoration: none;
+      }
+      .link a:hover {
+        text-decoration: underline;
+      }
+      .remove {
+        flex: 0 0 auto;
+        width: 30px;
+        height: 30px;
+        border: none;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .remove:hover {
+        background: var(--red-bg);
+        color: var(--red);
+      }
       .pill {
-        display: inline-flex; align-items: center; gap: 4px;
-        padding: 4px 9px; font-size: 10.5px; font-weight: 700;
-        border-radius: 999px; white-space: nowrap; flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 7px 10px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
       }
-      .pill.available         { background: var(--amber-bg); color: var(--amber); }
-      .pill.already_requested { background: var(--blue-bg);  color: var(--blue);  }
-      a.pill.accepted, .pill.accepted {
-        background: var(--green); color: white;
-        animation: glow 1.8s ease-in-out infinite; text-decoration: none;
+      .pill.available { background: var(--amber-bg); color: var(--amber); }
+      .pill.already_requested { background: var(--blue-bg); color: var(--blue); }
+      .pill.accepted {
+        background: var(--green);
+        color: white;
+        text-decoration: none;
       }
-      a.pill.accepted { cursor: pointer; transition: filter 0.12s, transform 0.12s; }
-      a.pill.accepted:hover { filter: brightness(1.08); transform: translateY(-1px); }
-      @keyframes glow {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(4, 120, 87, 0.45); }
-        50%      { box-shadow: 0 0 0 5px rgba(4, 120, 87, 0); }
-      }
-      .pill.not_invitation { background: var(--gray-bg); color: var(--gray); }
-      .pill.unknown { background: var(--gray-bg); color: var(--gray); }
-      .pill.checking { background: var(--gray-bg); color: var(--muted); }
+      .pill.not_invitation,
+      .pill.unknown,
+      .pill.checking { background: var(--gray-bg); color: var(--gray); }
       .pill.error { background: var(--red-bg); color: var(--red); }
-
-      .empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 12.5px; background: var(--surface); }
-      .empty .big { font-size: 36px; margin-bottom: 8px; opacity: 0.8; }
-
-      .err { color: var(--red); background: var(--red-bg); padding: 10px 12px; margin-top: 10px;
-        border-radius: 8px; font-size: 11.5px; border-left: 3px solid var(--red); }
-      .err:empty { display: none; }
-
-      .add-form { display: flex; gap: 6px; margin-top: 10px; }
-      .add-form input { flex: 1; }
-      .add-form button { flex: 0 0 auto; padding: 9px 14px; }
-
-      .footer-actions {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 8px 16px; font-size: 11px; color: var(--muted);
-        background: var(--bg);
+      .empty {
+        display: none;
+        padding: 18px 16px 20px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.5;
       }
-      .footer-actions a { color: var(--muted); text-decoration: none; }
-      .footer-actions a:hover { color: var(--text); text-decoration: underline; }
+      .empty.visible {
+        display: block;
+      }
+      .empty .big {
+        display: block;
+        margin-bottom: 7px;
+        font-size: 28px;
+      }
+      .footer-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 14px 16px 16px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .footer-actions a {
+        text-decoration: none;
+      }
+      .footer-actions a:hover {
+        color: var(--brand);
+      }
     </style>
   </head>
   <body>
-    <header>
-      <h1><span class="logo">🎟️</span> amzinvite</h1>
-      <div class="sub" id="sub">Chargement…</div>
-      <div class="meta" id="version">Version —</div>
-    </header>
+    <div class="shell">
+      <div class="panel">
+        <div class="hero">
+          <div class="hero-top">
+            <div class="brand">
+              <img class="brand-mark" src="icons/amzinvite-logo.svg" alt="amzinvite" />
+              <div>
+                <h1>amzinvite</h1>
+                <div class="meta" id="version">Version —</div>
+              </div>
+            </div>
+            <div class="eyebrow">72h pour acheter</div>
+          </div>
+          <div class="sub" id="sub">Chargement de ton suivi…</div>
+        </div>
 
-    <section>
-      <div class="summary-grid">
-        <div class="stat warn"><div class="n" id="stat-available">—</div><div class="l">Dispo</div></div>
-        <div class="stat info"><div class="n" id="stat-requested">—</div><div class="l">Demandées</div></div>
-        <div class="stat"><div class="n" id="stat-total">—</div><div class="l">Total</div></div>
+        <div class="stats">
+          <div class="stat warn"><span class="n" id="stat-available">—</span><span class="l">Dispo</span></div>
+          <div class="stat info"><span class="n" id="stat-requested">—</span><span class="l">Demandées</span></div>
+          <div class="stat"><span class="n" id="stat-total">—</span><span class="l">Suivis</span></div>
+        </div>
+
+        <div class="status-wrap">
+          <div class="status-line" id="next-check">Prochain check auto : —</div>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="check">Vérifier maintenant</button>
+          <button class="ghost" id="toggle-settings" title="Réglages">⚙</button>
+        </div>
+
+        <div class="err" id="err"></div>
+
+        <div class="collapse-target" id="settings">
+          <div class="section">
+            <div class="stack">
+              <div class="card">
+                <p class="card-title">Ajouter un lien Amazon</p>
+                <p class="card-copy">
+                  On vérifie qu’il s’agit bien d’un produit en mode invitation avant de l’ajouter à ton suivi local.
+                </p>
+                <div style="height:10px"></div>
+                <label class="field" for="addUrl">Lien produit</label>
+                <div class="inline-form">
+                  <input id="addUrl" type="url" placeholder="https://www.amazon.fr/dp/B0XXXXXXXX" />
+                  <button class="primary" id="addBtn">Ajouter</button>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="inline-field">
+                  <div>
+                    <label class="field" for="intervalMin">Intervalle auto</label>
+                    <p class="card-copy">Toutes les combien de minutes on refait un check.</p>
+                  </div>
+                  <input id="intervalMin" type="number" min="5" placeholder="30" />
+                </div>
+              </div>
+
+              <label class="toggle-row">
+                <input id="scrapeEnabled" type="checkbox" />
+                <span>
+                  <b>Contribuer au catalogue Amazon</b>
+                  <span class="hint">Activé par défaut. Tu peux couper l’envoi anonyme des pages Amazon observées à tout moment.</span>
+                </span>
+              </label>
+
+              <label class="toggle-row">
+                <input id="telemetryEnabled" type="checkbox" />
+                <span>
+                  <b>Aider le feed communautaire</b>
+                  <span class="hint">Partage anonyme des états d’invitation détectés pour améliorer le suivi global.</span>
+                </span>
+              </label>
+
+              <label class="toggle-row">
+                <input id="autoRequest" type="checkbox" />
+                <span>
+                  <b>Auto-demander les invitations</b>
+                  <span class="hint">Off par défaut. Si tu actives cette option, l’extension envoie la demande automatiquement quand un produit s’ouvre.</span>
+                </span>
+              </label>
+
+              <div class="auto-note" id="autoRequestNote">
+                Rappel : cette automatisation peut être contraire aux conditions d’utilisation d’Amazon. Utilisation à tes risques.
+              </div>
+
+              <div class="mini-actions">
+                <a class="button-link support" href="https://buymeacoffee.com/amzinvite" target="_blank" rel="noopener">Buy Me a Coffee</a>
+                <button id="reset" title="Reset complet">Reset</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="list-header">
+          <p class="list-title" id="list-title">Suivi</p>
+          <button class="text-button" id="toggle-hidden" type="button" hidden>Afficher tout</button>
+        </div>
+        <ul class="products" id="list"></ul>
+        <div class="empty" id="empty">
+          <span class="big">📭</span>
+          Aucun produit utile à afficher pour l’instant.<br />
+          Ajoute un lien Amazon en invitation si tu veux démarrer tout de suite.
+        </div>
+
+        <div class="footer-actions">
+          <a href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
+          <a href="https://github.com/amzinvite/amzinvite" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://buymeacoffee.com/amzinvite" target="_blank" rel="noopener">Support</a>
+        </div>
       </div>
-
-      <div class="actions">
-        <button class="primary" id="check">Vérifier maintenant</button>
-        <button class="ghost" id="toggle-settings" title="Paramètres">⚙️</button>
-      </div>
-      <div class="status-line" id="next-check">Prochain check auto : —</div>
-      <div class="err" id="err"></div>
-    </section>
-
-    <section id="settings" class="collapse-target">
-      <label class="field" for="intervalMin">Intervalle de check (min)</label>
-      <input id="intervalMin" type="number" min="5" placeholder="30" />
-
-      <label class="field">Ajouter un produit Amazon manuellement</label>
-      <div class="add-form">
-        <input id="addUrl" type="url" placeholder="https://www.amazon.fr/dp/B0XXXXXXXX" />
-        <button class="primary" id="addBtn">Ajouter</button>
-      </div>
-
-      <label class="toggle-row warn">
-        <input id="autoRequest" type="checkbox" />
-        <span>
-          <b>⚠️ Auto-demander les invitations</b>
-          <span class="hint">
-            POST direct à Amazon dès qu'un produit passe à "dispo". Discret
-            (aucune fenêtre), mais peut violer les TOS Amazon — utilisation à
-            tes risques. 1 tentative/h max par produit.
-          </span>
-        </span>
-      </label>
-
-      <label class="toggle-row">
-        <input id="telemetryEnabled" type="checkbox" />
-        <span>
-          <b>Aider la communauté (anonyme)</b>
-          <span class="hint">
-            Partage les détections d'état (ASIN + état + horodatage) avec un
-            UUID anonyme pour améliorer le feed pour tout le monde. Aucune
-            donnée perso. Voir privacy policy.
-          </span>
-        </span>
-      </label>
-
-      <label class="toggle-row">
-        <input id="scrapeEnabled" type="checkbox" />
-        <span>
-          <b>Contribuer au catalogue Amazon</b>
-          <span class="hint">
-            Quand tu visites une page produit ou de recherche Amazon, partage
-            de manière anonyme les ASINs, prix et stocks observés. Pas
-            d'identifiant associé. Hors par défaut.
-          </span>
-        </span>
-      </label>
-
-      <div class="actions">
-        <button class="primary" id="save">Enregistrer</button>
-        <button class="danger" id="reset" title="Reset complet (instanceId, watchlist custom, états)">Reset</button>
-      </div>
-    </section>
-
-    <div class="list-header" id="list-header">
-      <span id="list-title">Suivi</span>
-      <label class="show-all-toggle">
-        <input type="checkbox" id="showAll" />
-        <span>Tout afficher</span>
-      </label>
-    </div>
-    <ul class="products" id="list"></ul>
-    <div class="empty" id="empty" style="display:none;">
-      <div class="big">📭</div>
-      Aucun produit en mode invitation pour le moment.<br/>
-      <span style="font-size:11px; opacity:0.75">Ajoute-en un manuellement ou attends le feed communautaire.</span>
-    </div>
-
-    <div class="footer-actions">
-      <a href="https://amzinvite.example.com/privacy" target="_blank">Privacy</a>
-      <a href="https://github.com/yourname/amzinvite" target="_blank">GitHub</a>
     </div>
 
     <script src="popup.js"></script>

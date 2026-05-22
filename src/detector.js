@@ -202,7 +202,15 @@ export function detectInvitationState(rootText, doc, rawHtml) {
 // detectInvitationState pour bénéficier de la détection regex des blocs hdp.
 export function extractBuyboxText(htmlString) {
   if (typeof DOMParser !== "undefined") {
-    const doc = new DOMParser().parseFromString(htmlString, "text/html");
+    // Strip <script> avant parse : DOMParser n'exécute pas ces scripts mais
+    // Chrome émet quand même une violation CSP par inline script trouvé, sous
+    // la CSP de notre extension (`script-src 'self'`). Une page Amazon en
+    // contient ~10 → console polluée à chaque cycle de check.
+    const sanitized = (htmlString || "").replace(
+      /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,
+      "",
+    );
+    const doc = new DOMParser().parseFromString(sanitized, "text/html");
     const ppd =
       doc.querySelector("#ppd") ||
       doc.querySelector("#centerCol") ||

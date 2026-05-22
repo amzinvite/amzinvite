@@ -1,17 +1,18 @@
 const $ = (id) => document.getElementById(id);
 
 let nextCheckTimer = null;
+let activeFilter = "all";
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
 
 const STATE_LABELS = {
-  available: { txt: "Dispo a demander", cls: "available" },
-  already_requested: { txt: "Deja demandee", cls: "already_requested" },
-  accepted: { txt: "Selectionne", cls: "accepted" },
+  available: { txt: "Dispo à demander", cls: "available" },
+  already_requested: { txt: "Déjà demandée", cls: "already_requested" },
+  accepted: { txt: "Sélectionné", cls: "accepted" },
   not_invitation: { txt: "Hors invitation", cls: "not_invitation" },
-  unknown: { txt: "A verifier", cls: "unknown" },
-  stub_no_data: { txt: "A reverifier", cls: "unknown" },
+  unknown: { txt: "À vérifier", cls: "unknown" },
+  stub_no_data: { txt: "À revérifier", cls: "unknown" },
 };
 
 async function sendMessage(message) {
@@ -90,6 +91,7 @@ async function persistSettings({ reschedule = false } = {}) {
     intervalMin: Math.max(5, parseInt($("intervalMin").value || "30", 10)),
     autoRequest: $("autoRequest").checked,
     communityDataEnabled: $("communityDataEnabled").checked,
+    trackPokemonTcgFr: $("trackPokemonTcgFr").checked,
   });
   await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   if (reschedule) {
@@ -104,6 +106,7 @@ async function load() {
     "intervalMin",
     "autoRequest",
     "communityDataEnabled",
+    "trackPokemonTcgFr",
     "telemetryEnabled",
     "scrapeEnabled",
     "lastRun",
@@ -118,6 +121,7 @@ async function load() {
     "communityDataEnabled",
     cfg.communityDataEnabled == null ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled) : cfg.communityDataEnabled,
   );
+  setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr);
   renderAutoRequestNote();
 
   await refreshList(cfg.lastRun, cfg.showAll);
@@ -192,6 +196,17 @@ function renderHeader(items, lastRun) {
   }
 }
 
+function shouldHideState(state, showAll) {
+  if (activeFilter !== "all") return false;
+  return !showAll && HIDDEN_BY_DEFAULT.has(state);
+}
+
+function renderStatFilter() {
+  document.querySelectorAll(".stat[data-filter]").forEach((el) => {
+    el.classList.toggle("active", el.dataset.filter === activeFilter);
+  });
+}
+
 async function refreshList(lastRun, showAllOverride) {
   const res = await sendMessage({ type: "get-watchlist" });
   if (!res?.ok) {
@@ -210,6 +225,7 @@ async function refreshList(lastRun, showAllOverride) {
 
   renderList(res.items, showAll);
   renderHeader(res.items, lastRun);
+  renderStatFilter();
 }
 
 async function refreshNextCheck() {
@@ -281,7 +297,13 @@ function renderList(items, showAll) {
 
   for (const item of sorted) {
     const state = item.known_state || "unknown";
-    if (!showAll && HIDDEN_BY_DEFAULT.has(state)) {
+    const matchesFilter =
+      activeFilter === "all"
+      || (activeFilter === "available" && (state === "available" || state === "accepted"))
+      || state === activeFilter;
+
+    if (!matchesFilter) continue;
+    if (shouldHideState(state, showAll)) {
       hiddenCount++;
       continue;
     }
@@ -332,17 +354,17 @@ function renderList(items, showAll) {
   if (rendered === 0 && hiddenCount > 0) {
     $("empty").innerHTML = `
       <span class="big">🙈</span>
-      Tout est masque pour rester simple.<br />
-      Utilise “Afficher” si tu veux voir aussi les produits deja demandes.
+      Tout est masqué pour rester simple.<br />
+      Utilise “Afficher” si tu veux voir aussi les produits déjà demandés.
     `;
     renderEmpty(true);
   } else {
     $("empty").innerHTML = `
       <span class="big">📭</span>
-      Aucun produit utile a afficher pour l’instant.<br />
-      Ajoute un lien Amazon en invitation si tu veux demarrer tout de suite.
+      Aucun produit utile à afficher pour l’instant.<br />
+      Active POKÉMON TCG FR ou ajoute un lien Amazon en invitation.
     `;
-    renderEmpty(false);
+    renderEmpty(rendered === 0);
   }
 }
 
@@ -369,6 +391,16 @@ $("communityDataEnabled").addEventListener("change", async () => {
   await persistSettings();
 });
 
+$("trackPokemonTcgFr").addEventListener("change", async () => {
+  await persistSettings();
+  if ($("trackPokemonTcgFr").checked) {
+    await sendMessage({ type: "refresh-public-feed" });
+  } else {
+    await sendMessage({ type: "clear-public-feed" });
+  }
+  await refreshList();
+});
+
 $("addBtn").addEventListener("click", async () => {
   const url = $("addUrl").value.trim();
   if (!url) {
@@ -383,7 +415,7 @@ $("addBtn").addEventListener("click", async () => {
     const res = await sendMessage({ type: "add-custom-url", url });
     if (!res?.ok) throw new Error(res?.error || "Ajout impossible");
     $("addUrl").value = "";
-    const state = STATE_LABELS[res.state]?.txt || "Invitation detectee";
+    const state = STATE_LABELS[res.state]?.txt || "Invitation détectée";
     $("sub").textContent = `Ajoute localement · ${state}`;
     await refreshList();
   } catch (e) {
@@ -432,6 +464,16 @@ $("check").addEventListener("click", async () => {
   chrome.runtime.sendMessage({ type: "check-now" }, () => {
     void chrome.runtime.lastError;
     finalize();
+  });
+});
+
+document.querySelectorAll(".stat[data-filter]").forEach((el) => {
+  el.addEventListener("click", async () => {
+    activeFilter = el.dataset.filter || "all";
+    if (activeFilter !== "all") {
+      await chrome.storage.local.set({ showAll: true });
+    }
+    await refreshList();
   });
 });
 

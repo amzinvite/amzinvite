@@ -148,6 +148,13 @@
         border: 1px solid var(--border);
         background: var(--surface-strong);
         text-align: left;
+        cursor: pointer;
+        transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+      }
+      .stat:hover { transform: translateY(-1px); }
+      .stat.active {
+        border-color: var(--brand);
+        background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface-strong));
       }
       .stat .n {
         display: block;
@@ -536,12 +543,13 @@
             <div class="eyebrow">72h pour acheter</div>
           </div>
           <div class="sub" id="sub">Chargement de ton suivi…</div>
+          <div class="meta" style="margin-top:8px">Auto-demande disponible dans les réglages, désactivée par défaut.</div>
         </div>
 
         <div class="stats">
-          <div class="stat warn"><span class="n" id="stat-available">—</span><span class="l">Dispo</span></div>
-          <div class="stat info"><span class="n" id="stat-requested">—</span><span class="l">Demandées</span></div>
-          <div class="stat"><span class="n" id="stat-total">—</span><span class="l">Suivis</span></div>
+          <div class="stat warn" data-filter="available"><span class="n" id="stat-available">—</span><span class="l">Dispo</span></div>
+          <div class="stat info" data-filter="already_requested"><span class="n" id="stat-requested">—</span><span class="l">Demandées</span></div>
+          <div class="stat active" data-filter="all"><span class="n" id="stat-total">—</span><span class="l">Suivis</span></div>
         </div>
 
         <div class="status-wrap">
@@ -584,8 +592,16 @@
               <label class="toggle-row">
                 <input id="communityDataEnabled" type="checkbox" />
                 <span>
-                  <b>Aider amzinvite avec des donnees anonymes</b>
-                  <span class="hint">Active par defaut. Partage anonymement les invitations detectees et certaines observations Amazon pour ameliorer le feed et le catalogue.</span>
+                  <b>Aider amzinvite avec des données anonymes</b>
+                  <span class="hint">Activé par défaut. Partage anonymement les invitations détectées et certaines observations Amazon pour améliorer le feed et le catalogue.</span>
+                </span>
+              </label>
+
+              <label class="toggle-row">
+                <input id="trackPokemonTcgFr" type="checkbox" />
+                <span>
+                  <b>Suivre automatiquement POKÉMON TCG FR</b>
+                  <span class="hint">Désactivé par défaut. Active cette option pour suivre automatiquement les produits Pokémon TCG FR du feed public.</span>
                 </span>
               </label>
 
@@ -617,13 +633,12 @@
         <div class="empty" id="empty">
           <span class="big">📭</span>
           Aucun produit utile à afficher pour l’instant.<br />
-          Ajoute un lien Amazon en invitation si tu veux démarrer tout de suite.
+          Active POKÉMON TCG FR ou ajoute un lien Amazon en invitation.
         </div>
 
         <div class="footer-actions">
           <a href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
           <a href="https://github.com/amzinvite/amzinvite" target="_blank" rel="noopener">GitHub</a>
-          <a href="https://buymeacoffee.com/amzinvite" target="_blank" rel="noopener">Support</a>
         </div>
       </div>
     </div>

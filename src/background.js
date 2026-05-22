@@ -31,6 +31,7 @@ const FEED_REFRESH_MS = 30 * 60 * 1000; // 30 min
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const BUYABLE_BADGE_BG = "#1D7A52";
+const POKEMON_TCG_FR_RE = /\bpok[ée]mon\b/i;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Identifiant d'instance anonyme — généré au premier lancement
@@ -48,6 +49,7 @@ async function getSettings() {
     "intervalMin",
     "autoRequest",
     "communityDataEnabled",
+    "trackPokemonTcgFr",
     "telemetryEnabled",
     "scrapeEnabled",
   ]);
@@ -58,6 +60,7 @@ async function getSettings() {
     intervalMin: cfg.intervalMin || DEFAULT_INTERVAL_MIN,
     autoRequest: !!cfg.autoRequest,
     communityDataEnabled,
+    trackPokemonTcgFr: !!cfg.trackPokemonTcgFr,
   };
 }
 
@@ -96,6 +99,13 @@ async function refreshPublicFeed() {
   return items;
 }
 
+async function clearPublicFeed() {
+  await chrome.storage.local.set({
+    publicFeed: [],
+    publicFeedFetchedAt: null,
+  });
+}
+
 async function getWatchlist() {
   const { publicFeed, customUrls, knownStates, publicFeedFetchedAt } =
     await chrome.storage.local.get([
@@ -104,11 +114,16 @@ async function getWatchlist() {
       "knownStates",
       "publicFeedFetchedAt",
     ]);
-  let feed = publicFeed || [];
-  // Refresh si stale ou jamais fetché
-  if (!publicFeedFetchedAt || Date.now() - publicFeedFetchedAt > FEED_REFRESH_MS) {
-    try { feed = await refreshPublicFeed(); }
-    catch (e) { console.warn("[amzinvite] feed refresh failed:", e); }
+  const { trackPokemonTcgFr } = await getSettings();
+  let feed = [];
+  if (trackPokemonTcgFr) {
+    feed = publicFeed || [];
+    // Refresh si stale ou jamais fetché
+    if (!publicFeedFetchedAt || Date.now() - publicFeedFetchedAt > FEED_REFRESH_MS) {
+      try { feed = await refreshPublicFeed(); }
+      catch (e) { console.warn("[amzinvite] feed refresh failed:", e); }
+    }
+    feed = feed.filter((it) => isPokemonTcgFrProduct(it));
   }
   const custom = (customUrls || []).map((u) => ({ url: u, name: shortPath(u), custom: true }));
   const states = knownStates || {};
@@ -118,6 +133,11 @@ async function getWatchlist() {
     ...it,
     known_state: states[asinFromUrl(it.url)] || null,
   }));
+}
+
+function isPokemonTcgFrProduct(item) {
+  const name = String(item?.name || "");
+  return POKEMON_TCG_FR_RE.test(name);
 }
 
 async function updateActionBadge(items = null) {
@@ -378,6 +398,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     "intervalMin",
     "autoRequest",
     "communityDataEnabled",
+    "trackPokemonTcgFr",
     "telemetryEnabled",
     "scrapeEnabled",
     "showAll",
@@ -388,6 +409,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (existing.communityDataEnabled == null) {
     defaults.communityDataEnabled = existing.scrapeEnabled !== false || !!existing.telemetryEnabled;
   }
+  if (existing.trackPokemonTcgFr == null) defaults.trackPokemonTcgFr = false;
   if (existing.showAll == null) defaults.showAll = false;
   if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   if (existing.telemetryEnabled != null || existing.scrapeEnabled != null) {
@@ -410,6 +432,13 @@ updateActionBadge();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) runCheck();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.knownStates || changes.customUrls || changes.trackPokemonTcgFr || changes.publicFeed) {
+    void updateActionBadge();
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -436,6 +465,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "reschedule-alarm") {
     scheduleAlarm().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg?.type === "refresh-public-feed") {
+    refreshPublicFeed()
+      .then((items) => sendResponse({ ok: true, count: items.length }))
+      .catch((e) => sendResponse({ ok: false, error: String(e.message || e) }));
+    return true;
+  }
+  if (msg?.type === "clear-public-feed") {
+    clearPublicFeed()
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e.message || e) }));
     return true;
   }
   if (msg?.type === "scrape-items") {

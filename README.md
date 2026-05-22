@@ -4,7 +4,8 @@ Extension Chrome qui surveille les produits Amazon en mode invitation et te pré
 
 ## Ce que fait l'extension
 
-- suit automatiquement les produits actuellement en mode invitation
+- ne suit rien automatiquement par défaut
+- peut suivre automatiquement les produits POKÉMON TCG FR via une option dédiée
 - notifie quand une invitation devient disponible ou acceptée
 - permet d'ajouter un lien Amazon manuellement à ton suivi local
 - propose une option d'auto-demande, désactivée par défaut
@@ -29,7 +30,14 @@ Lien à venir.
 |---|---|---|
 | Intervalle auto | 30 min | Fréquence de vérification |
 | Partage anonyme | ON | Aide à améliorer le feed et le catalogue |
+| Suivi POKÉMON TCG FR | OFF | Active le suivi automatique du feed public pour cette catégorie |
 | Auto-demander | OFF | Envoie la demande d'invitation automatiquement |
+
+## Suivi
+
+- sans option activée, l'extension ne suit rien automatiquement
+- tu peux ajouter un produit manuellement via son lien Amazon en mode invitation
+- tu peux activer le suivi automatique de POKÉMON TCG FR depuis les réglages
 
 ## Confidentialité
 

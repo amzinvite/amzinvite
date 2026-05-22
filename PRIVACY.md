@@ -9,7 +9,7 @@ amzinvite est conçu pour fonctionner avec un minimum de données.
 Les informations suivantes restent dans le navigateur :
 
 - `instanceId` : identifiant anonyme généré localement
-- `intervalMin`, `autoRequest`, `communityDataEnabled` : préférences de l'extension
+- `intervalMin`, `autoRequest`, `communityDataEnabled`, `trackPokemonTcgFr` : préférences de l'extension
 - `customUrls` : liens Amazon ajoutés manuellement
 - `knownStates` : états détectés pour les produits suivis
 - `publicFeed`, `lastRun`, `checkProgress`, `autoSpawnLog` : données internes de fonctionnement
@@ -30,6 +30,13 @@ Quand l'option de partage anonyme est activée, l'extension peut envoyer :
 - certaines observations Amazon utiles à l'amélioration du catalogue
 
 Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent pas de nom, d'email ou d'informations de paiement.
+
+## Suivi automatique
+
+Par défaut, amzinvite ne suit aucun produit automatiquement. Tu peux :
+
+1. ajouter des liens Amazon manuellement
+2. activer le suivi automatique POKÉMON TCG FR
 
 ## Données envoyées à Amazon
 

@@ -30,6 +30,7 @@ const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
 const FEED_REFRESH_MS = 30 * 60 * 1000; // 30 min
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
+const BUYABLE_BADGE_BG = "#1D7A52";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Identifiant d'instance anonyme — généré au premier lancement
@@ -117,6 +118,22 @@ async function getWatchlist() {
     ...it,
     known_state: states[asinFromUrl(it.url)] || null,
   }));
+}
+
+async function updateActionBadge(items = null) {
+  try {
+    const watchlist = items || await getWatchlist();
+    const buyableCount = watchlist.filter((it) => it.known_state === "accepted").length;
+    await chrome.action.setBadgeBackgroundColor({ color: BUYABLE_BADGE_BG });
+    await chrome.action.setBadgeText({ text: buyableCount > 0 ? String(Math.min(buyableCount, 99)) : "" });
+    await chrome.action.setTitle({
+      title: buyableCount > 0
+        ? `amzinvite — ${buyableCount} produit(s) achetable(s)`
+        : "amzinvite — invitations Amazon",
+    });
+  } catch (e) {
+    console.warn("[amzinvite] badge update failed:", e);
+  }
 }
 
 async function setKnownState(url, state) {
@@ -376,6 +393,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (existing.telemetryEnabled != null || existing.scrapeEnabled != null) {
     await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   }
+  await updateActionBadge();
 
   // Ouvre la page d'onboarding au premier install
   if (details.reason === "install") {
@@ -385,8 +403,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(() => {
   scheduleAlarm();
   setupOriginRewrite();
+  updateActionBadge();
 });
 setupOriginRewrite();
+updateActionBadge();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) runCheck();
@@ -427,8 +447,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "report-state") {
     // Provenance content.js (page produit visitée par l'user)
     const asin = asinFromUrl(msg.url);
-    setKnownState(msg.url, msg.state);
-    sendFeedback(asin, msg.state, "manual_visit");
+    void (async () => {
+      try {
+        await Promise.all([
+          setKnownState(msg.url, msg.state),
+          sendFeedback(asin, msg.state, "manual_visit"),
+        ]);
+      } catch (e) {
+        console.warn("[amzinvite] manual visit report failed:", e);
+      }
+      await updateActionBadge();
+    })();
     sendResponse({ ok: true });
     return false;
   }
@@ -447,7 +476,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "reset-instance") {
-    chrome.storage.local.clear().then(() => sendResponse({ ok: true }));
+    chrome.storage.local.clear().then(async () => {
+      await updateActionBadge([]);
+      sendResponse({ ok: true });
+    });
     return true;
   }
 });
@@ -473,6 +505,7 @@ async function addCustomUrl(url) {
   set.add(normalizedUrl);
   await chrome.storage.local.set({ customUrls: [...set] });
   await setKnownState(normalizedUrl, state);
+  await updateActionBadge();
   return { url: normalizedUrl, state };
 }
 
@@ -481,6 +514,7 @@ async function removeCustomUrl(url) {
   await chrome.storage.local.set({
     customUrls: (customUrls || []).filter((u) => u !== url),
   });
+  await updateActionBadge();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -543,6 +577,7 @@ async function runCheckOnce() {
       const { text, doc, rawHtml } = extractBuyboxText(html);
       const state = detectInvitationState(text, doc, rawHtml);
       const asin = asinFromUrl(it.url);
+      const prevState = it.known_state || null;
       await setKnownState(it.url, state);
       await sendFeedback(asin, state, "bg_check");
       summary.checked++;
@@ -574,8 +609,8 @@ async function runCheckOnce() {
         }
       }
 
-      // Notif visuelle pour les transitions actionnables
-      if (state === "accepted") {
+      // Notif seulement lors des transitions actionnables pour eviter le spam.
+      if (state === "accepted" && prevState !== "accepted") {
         chrome.notifications.create({
           type: "basic",
           iconUrl: "icons/icon128.png",
@@ -583,7 +618,7 @@ async function runCheckOnce() {
           message: `${it.name || asin} — clique pour acheter (72h max)`,
           priority: 2,
         });
-      } else if (state === "available") {
+      } else if (state === "available" && prevState !== "available") {
         chrome.notifications.create({
           type: "basic",
           iconUrl: "icons/icon128.png",
@@ -601,6 +636,7 @@ async function runCheckOnce() {
 
   await chrome.storage.local.set({ lastRun: { ts: Date.now(), ...summary } });
   await chrome.storage.local.remove("checkProgress");
+  await updateActionBadge();
   return summary;
 }
 

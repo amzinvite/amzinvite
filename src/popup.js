@@ -467,6 +467,16 @@ $("addBtn").addEventListener("click", async () => {
   try {
     const res = await sendMessage({ type: "add-custom-url", url });
     if (!res?.ok) throw new Error(res?.error || "Ajout impossible");
+    if (res.added === false) {
+      if (res.reason === "already_custom") {
+        setError("Ce produit est déjà ajouté dans ton suivi manuel.");
+      } else if (res.reason === "already_feed") {
+        setError("Ce produit est déjà suivi via le feed public.");
+      } else {
+        setError("Ce produit est déjà suivi.");
+      }
+      return;
+    }
     $("addUrl").value = "";
     const state = STATE_LABELS[res.state]?.txt || "Invitation détectée";
     $("sub").textContent = `Ajoute localement · ${state}`;

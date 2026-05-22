@@ -79,9 +79,9 @@
         gap: 8px;
         padding: 7px 12px;
         border-radius: 999px;
-        background: rgba(255,255,255,0.72);
-        border: 1px solid var(--border);
-        color: var(--text-soft);
+        background: transparent;
+        border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--border));
+        color: var(--brand-strong);
         font-size: 12px;
         font-weight: 700;
         text-transform: uppercase;
@@ -92,6 +92,7 @@
         font-size: 40px;
         line-height: 1.05;
         letter-spacing: -0.04em;
+        color: var(--text);
       }
       .lede {
         margin: 0;
@@ -191,7 +192,7 @@
             <img src="icons/amzinvite-logo.svg" alt="amzinvite" />
             <div class="eyebrow">amzinvite · simple et rapide</div>
           </div>
-          <h1>Tu surveilles.<br />On te previens.</h1>
+          <h1>Tu surveilles.<br />On te prévient.</h1>
           <p class="lede">
             amzinvite suit les produits Amazon en mode invitation, te notifie au bon moment
             et reste volontairement minimal pour ne pas t’encombrer.
@@ -211,27 +212,26 @@
           <div class="step">
             <h3>Auto-demande optionnelle</h3>
             <p>
-              L’option d’auto-demande est desactivee par defaut. Si tu l’actives plus tard,
-              un rappel te precise que cela peut contrevenir aux conditions d’utilisation Amazon.
+              L’option d’auto-demande est désactivée par défaut. Si tu l’actives plus tard,
+              un rappel te précise que cela peut contrevenir aux conditions d’utilisation Amazon.
             </p>
           </div>
 
           <div class="step">
-            <h3>Donnees et ajouts manuels</h3>
+            <h3>Données et ajouts manuels</h3>
             <p>
-              Le partage anonyme pour ameliorer amzinvite est actif par defaut, mais tu peux
-              le couper dans les reglages. Tu peux aussi ajouter ton propre lien Amazon :
-              on verifie d’abord qu’il est bien en mode invitation et il reste local a ton extension.
+              Le partage anonyme pour améliorer amzinvite est actif par défaut, mais tu peux
+              le couper dans les réglages. Tu peux aussi ajouter ton propre lien Amazon :
+              on vérifie d’abord qu’il est bien en mode invitation et il reste local à ton extension.
             </p>
           </div>
         </div>
 
         <div class="callout">
-          Un lien d’achat accepte par Amazon reste generalement valable 72h. Garde tes notifications actives.
+          Un lien d’achat accepté par Amazon reste généralement valable 72h. Garde tes notifications actives.
         </div>
 
         <div class="actions">
-          <button class="primary" id="open-popup">Ouvrir amzinvite</button>
           <a class="button-link secondary" href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Lire la privacy policy</a>
           <a class="button-link support" href="https://buymeacoffee.com/amzinvite" target="_blank" rel="noopener">Buy Me a Coffee</a>
         </div>
@@ -243,10 +243,5 @@
       </div>
     </div>
 
-    <script>
-      document.getElementById("open-popup").addEventListener("click", () => {
-        window.location.href = chrome.runtime.getURL("popup.html");
-      });
-    </script>
   </body>
 </html>

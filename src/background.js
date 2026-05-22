@@ -63,6 +63,14 @@ async function getSettings() {
   };
 }
 
+async function hasTrackingSources() {
+  const [{ trackPokemonTcgFr }, { customUrls }] = await Promise.all([
+    getSettings(),
+    chrome.storage.local.get("customUrls"),
+  ]);
+  return !!trackPokemonTcgFr || (customUrls || []).length > 0;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // HMAC signing pour les endpoints de feedback (anti-bot soft)
 // ─────────────────────────────────────────────────────────────────────────
@@ -368,6 +376,10 @@ function isStub(html) {
 // Alarmes + keepalive
 // ─────────────────────────────────────────────────────────────────────────
 async function scheduleAlarm() {
+  if (!(await hasTrackingSources())) {
+    await chrome.alarms.clear(ALARM_NAME);
+    return;
+  }
   const { intervalMin } = await getSettings();
   const jitter = 1 + (Math.random() * 0.4 - 0.2);
   const period = Math.max(5, Math.round(intervalMin * jitter));
@@ -466,6 +478,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.knownStates || changes.customUrls || changes.trackPokemonTcgFr || changes.publicFeed) {
     void updateActionBadge();
+  }
+  if (changes.customUrls || changes.trackPokemonTcgFr || changes.intervalMin) {
+    void scheduleAlarm();
   }
 });
 

@@ -2,7 +2,7 @@
 // Extracts product info (name, price, stock, ASIN, image) and POSTs to
 // /api/extension/scrape. Transparent : pas de badge UI, juste de la data.
 
-console.log("[alerter-scrape] product script LOADED on", location.href);
+console.log("[amzinvite] product script loaded on", location.href);
 
 (function () {
   // Stop si on est dans une fenêtre cachée déclenchée par invitation watcher :
@@ -18,7 +18,7 @@ console.log("[alerter-scrape] product script LOADED on", location.href);
     const asin = dom.extractAsin();
     const name = dom.extractName();
     if (!name) {
-      console.log("[alerter-scrape] no product name found, skip");
+      console.log("[amzinvite] no product name found, skip");
       return null;
     }
     const { stock_status, in_stock } = dom.detectStockStatus();
@@ -42,10 +42,10 @@ console.log("[alerter-scrape] product script LOADED on", location.href);
     chrome.runtime.sendMessage({ type: "scrape-items", items: [item] }, (res) => {
       void chrome.runtime.lastError;
       if (!res?.ok) {
-        console.warn("[alerter-scrape] post failed", res?.error);
+        console.warn("[amzinvite] post failed", res?.error);
       } else {
         const action = res.outcomes?.[0]?.action;
-        console.log("[alerter-scrape] posted", item.name, "→", action);
+        console.log("[amzinvite] posted", item.name, "→", action);
       }
     });
   }
@@ -74,7 +74,7 @@ console.log("[alerter-scrape] product script LOADED on", location.href);
         const item = scrape();
         if (isUseful(item) || Date.now() - started >= timeoutMs) finish(item);
       } catch (e) {
-        console.warn("[alerter-scrape] error", e);
+        console.warn("[amzinvite] error", e);
         finish(null);
       }
     };

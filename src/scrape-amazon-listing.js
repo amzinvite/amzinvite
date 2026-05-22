@@ -1,7 +1,7 @@
 // scrape-amazon-listing.js — runs on Amazon search results / category pages.
 // Extracts the product cards visible on the page and POSTs them as candidates.
 
-console.log("[alerter-scrape] listing script LOADED on", location.href);
+console.log("[amzinvite] listing script loaded on", location.href);
 
 (function () {
   function parsePrice(s) {
@@ -64,14 +64,14 @@ console.log("[alerter-scrape] listing script LOADED on", location.href);
     chrome.runtime.sendMessage({ type: "scrape-items", items }, (res) => {
       void chrome.runtime.lastError;
       if (!res?.ok) {
-        console.warn("[alerter-scrape] listing post failed", res?.error);
+        console.warn("[amzinvite] listing post failed", res?.error);
         return;
       }
       const counts = (res.outcomes || []).reduce((acc, o) => {
         acc[o.action] = (acc[o.action] || 0) + 1;
         return acc;
       }, {});
-      console.log(`[alerter-scrape] listing posted ${items.length} → ${JSON.stringify(counts)}`);
+      console.log(`[amzinvite] listing posted ${items.length} → ${JSON.stringify(counts)}`);
     });
   }
 
@@ -92,8 +92,8 @@ console.log("[alerter-scrape] listing script LOADED on", location.href);
   const container = document.querySelector(".s-main-slot, .s-result-list") || document.body;
   const observer = new MutationObserver(() => {
     // Debounce : on attend 1.5s d'inactivité avant de relancer un scrape
-    clearTimeout(window.__alerter_scrape_t);
-    window.__alerter_scrape_t = setTimeout(scrapeAndPostFresh, 1500);
+    clearTimeout(window.__amzinvite_scrape_t);
+    window.__amzinvite_scrape_t = setTimeout(scrapeAndPostFresh, 1500);
   });
   observer.observe(container, { childList: true, subtree: true });
 })();

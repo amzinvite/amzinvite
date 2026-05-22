@@ -1,98 +1,49 @@
 # Privacy Policy — amzinvite
 
-**Dernière mise à jour :** 2026-05-21
+**Dernière mise à jour :** 2026-05-22
 
-amzinvite est une extension Chrome conçue pour respecter ta vie privée. Aucune authentification, aucun compte, aucune donnée perso requise.
+amzinvite est conçu pour fonctionner avec un minimum de données.
 
-## Données stockées localement (chrome.storage.local)
+## Données stockées localement
 
-Toutes ces données restent **uniquement dans ton navigateur** et ne sont jamais transmises à nos serveurs ni à des tiers :
+Les informations suivantes restent dans le navigateur :
 
-- `instanceId` : UUID anonyme généré au premier lancement
-- `intervalMin`, `autoRequest`, `telemetryEnabled`, `scrapeEnabled` : tes préférences
-- `customUrls` : les URLs Amazon que tu as ajoutées manuellement
-- `knownStates` : l'état détecté pour chaque produit suivi
-- `publicFeed` : copie locale du feed public (cache)
-- `autoSpawnLog`, `lastRun`, `checkProgress` : état interne de l'extension
+- `instanceId` : identifiant anonyme généré localement
+- `intervalMin`, `autoRequest`, `communityDataEnabled` : préférences de l'extension
+- `customUrls` : liens Amazon ajoutés manuellement
+- `knownStates` : états détectés pour les produits suivis
+- `publicFeed`, `lastRun`, `checkProgress`, `autoSpawnLog` : données internes de fonctionnement
 
-Tu peux tout supprimer à tout moment via le bouton **"Reset"** dans les paramètres.
+Un reset complet est disponible depuis le popup.
 
-## Données envoyées à nos serveurs
+## Données envoyées au service amzinvite
 
-### Feed public (toujours actif)
-L'extension récupère la liste des produits Amazon actuellement en mode invitation depuis notre endpoint public :
+### Feed public
 
-```
-GET https://amzinvite.example.com/api/public/invitations
-```
+L'extension récupère la liste publique des produits en mode invitation.
 
-C'est une **requête anonyme** (aucun header d'identification). Notre serveur enregistre éventuellement l'IP dans les logs HTTP standards pour le rate-limiting, conservée 7 jours puis supprimée.
+### Partage anonyme
 
-### Feedback de détection (opt-in via toggle "Aider la communauté")
-Si tu actives cette option, l'extension envoie pour chaque produit dont elle détecte un changement d'état :
+Quand l'option de partage anonyme est activée, l'extension peut envoyer :
 
-```json
-{
-  "asin": "B0XXXXXXXX",
-  "state": "available" | "already_requested" | "accepted" | "not_invitation",
-  "source": "bg_check" | "manual_visit" | "auto_request",
-  "observedAt": 1779380900
-}
-```
+- des détections d'état d'invitation
+- certaines observations Amazon utiles à l'amélioration du catalogue
 
-Headers envoyés :
-- `X-Instance-Id` : ton UUID anonyme local
-- `X-Ts`, `X-Sig` : timestamp et signature HMAC (anti-spoof)
-
-**Ce qui n'est PAS envoyé :** ton compte Amazon, ton nom, ton email, ton historique de navigation, le contenu de tes achats, ton IP brute (juste un hash).
-
-### Observations Amazon (opt-in via toggle "Contribuer au catalogue")
-Si tu actives cette option, quand tu visites une page produit Amazon ou que tu fais une recherche, l'extension envoie :
-
-```json
-{
-  "items": [
-    { "asin": "B0XXXXXXXX", "price": 1999, "in_stock": true, "name": "..." }
-  ],
-  "dayBucket": "2026-05-21"
-}
-```
-
-**Aucun instanceId n'est envoyé** avec ces observations — elles sont totalement anonymes. Le serveur agrège uniquement par produit, pas par utilisateur.
+Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent pas de nom, d'email ou d'informations de paiement.
 
 ## Données envoyées à Amazon
 
-Quand l'option **"Auto-demander les invitations"** est activée, l'extension envoie une requête POST à l'endpoint d'invitation d'Amazon :
+Si l'option **Auto-demander** est activée, l'extension peut envoyer la demande d'invitation directement à Amazon en utilisant la session Amazon déjà ouverte dans le navigateur.
 
-```
-POST https://data.amazon.fr/custom/highdemandproductcontracts/request-invite/{uuid}
-```
+## Contrôle utilisateur
 
-Cette requête utilise **tes propres cookies** de session Amazon (comme si tu avais cliqué le bouton manuellement). Aucune donnée ne transite par nos serveurs dans ce flux.
+Tu peux à tout moment :
 
-## Tes droits (RGPD)
-
-L'instanceId étant un pseudonyme non lié à ton identité, nous n'avons aucun moyen de t'identifier. Tu peux à tout moment :
-
-1. **Reset complet** : bouton "Reset" dans les paramètres → ton UUID est régénéré, ton historique local supprimé
-2. **Désactiver les opt-in** : décoche les toggles "Aider la communauté" et "Contribuer au catalogue"
-3. **Désinstaller l'extension** : toutes les données locales sont supprimées par Chrome
-4. **Demande d'effacement serveur** : envoie ton instanceId à privacy@amzinvite.example.com — nous supprimerons toutes les données associées sous 30 jours
-
-## Hébergement
-
-Les données agrégées sont stockées sur des serveurs en Europe (région à préciser). Aucune donnée n'est transférée hors UE.
-
-## Bases légales (RGPD)
-
-- **Article 6.1.f** : intérêt légitime à fournir un service de tracker d'invitations et à améliorer la qualité de notre feed
-- **Article 13** : information transparente sur les traitements
-- **Article 25** : privacy by design — opt-in par défaut, minimisation des données
-
-## Changements
-
-Si cette politique change, la version mise à jour sera publiée à `https://amzinvite.example.com/privacy` et notifiée via une bannière dans le popup de l'extension.
+1. désactiver le partage anonyme
+2. désactiver l'auto-demande
+3. supprimer les données locales via le bouton Reset
+4. désinstaller l'extension
 
 ## Contact
 
-Pour toute question relative à cette politique : privacy@amzinvite.example.com
+Pour toute question liée à la confidentialité, utilise le dépôt GitHub officiel du projet.

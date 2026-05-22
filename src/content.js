@@ -1,8 +1,8 @@
 // content.js — injecté sur les pages produit Amazon visitées par l'user.
 // Détecte l'état d'invitation depuis le DOM réel et :
 //   1. Affiche un badge discret en haut à droite
-//   2. Reporte l'état au service worker (qui le met en local + envoie au
-//      backend si telemetryEnabled)
+//   2. Reporte l'état au service worker (qui le met en local + peut l'envoyer
+//      au backend si le partage anonyme est actif)
 
 (function () {
   const HDP_STATE_BLOCKS = [

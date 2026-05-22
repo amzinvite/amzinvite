@@ -1,19 +1,19 @@
 // background.js — service worker MV3 d'amzinvite
 //
-// Architecture distribuée (vs version "alerter" interne) :
+// Architecture distribuée :
 //
 //   1. WATCHLIST    : combinaison d'un feed public (curé par notre scraper)
 //                     et d'URLs ajoutées manuellement par l'user
 //   2. ÉTAT         : 100% local (chrome.storage.local), aucune donnée perso
 //                     ne quitte le navigateur de l'user
-//   3. FEEDBACK     : opt-in via toggle settings. Si activé, envoie des
-//                     détections anonymes (asin + state + timestamp) à notre
-//                     backend avec un instanceId UUID anonyme
+//   3. DONNEES ANONYMES : opt-out via toggle settings. Si activé, envoie
+//                     des détections anonymes et des observations Amazon
+//                     pour améliorer le feed et le catalogue
 //   4. AUTO-REQUEST : opt-in avec disclaimer. POST direct à l'endpoint
 //                     d'invitation Amazon. Aucune fenêtre ouverte, aucun clic
-//   5. SCRAPING     : opt-in. Les content scripts scrape-amazon-* envoient
-//                     les ASINs/prix/stocks observés à notre backend.
-//                     Anonymisé (pas d'instanceId associé aux observations)
+//   5. SCRAPING     : les content scripts scrape-amazon-* envoient les
+//                     ASINs/prix/stocks observés à notre backend quand le
+//                     partage anonyme est activé
 
 import { detectInvitationState, extractBuyboxText } from "./detector.js";
 
@@ -46,14 +46,17 @@ async function getSettings() {
   const cfg = await chrome.storage.local.get([
     "intervalMin",
     "autoRequest",
+    "communityDataEnabled",
     "telemetryEnabled",
     "scrapeEnabled",
   ]);
+  const communityDataEnabled = cfg.communityDataEnabled == null
+    ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled)
+    : !!cfg.communityDataEnabled;
   return {
     intervalMin: cfg.intervalMin || DEFAULT_INTERVAL_MIN,
     autoRequest: !!cfg.autoRequest,
-    telemetryEnabled: !!cfg.telemetryEnabled,
-    scrapeEnabled: cfg.scrapeEnabled !== false,
+    communityDataEnabled,
   };
 }
 
@@ -157,8 +160,8 @@ function shortPath(url) {
 // Feedback anonyme vers notre backend (opt-in)
 // ─────────────────────────────────────────────────────────────────────────
 async function sendFeedback(asin, state, source = "bg_check") {
-  const { telemetryEnabled } = await getSettings();
-  if (!telemetryEnabled || !asin) return;
+  const { communityDataEnabled } = await getSettings();
+  if (!communityDataEnabled || !asin) return;
   try {
     const instanceId = await getInstanceId();
     const body = JSON.stringify({ asin, state, source, observedAt: Math.floor(Date.now() / 1000) });
@@ -183,8 +186,8 @@ async function sendFeedback(asin, state, source = "bg_check") {
 // Scraping passif (opt-in) — délégué par les content scripts
 // ─────────────────────────────────────────────────────────────────────────
 async function forwardScrape(items) {
-  const { scrapeEnabled } = await getSettings();
-  if (!scrapeEnabled || !items?.length) return { skipped: true };
+  const { communityDataEnabled } = await getSettings();
+  if (!communityDataEnabled || !items?.length) return { skipped: true };
   try {
     // Anonymisation : pas d'instanceId envoyé avec les observations scrape,
     // juste un dayBucket hashé pour rate-limit serveur.
@@ -357,6 +360,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   const existing = await chrome.storage.local.get([
     "intervalMin",
     "autoRequest",
+    "communityDataEnabled",
     "telemetryEnabled",
     "scrapeEnabled",
     "showAll",
@@ -364,10 +368,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   const defaults = {};
   if (existing.intervalMin == null) defaults.intervalMin = DEFAULT_INTERVAL_MIN;
   if (existing.autoRequest == null) defaults.autoRequest = false;
-  if (existing.telemetryEnabled == null) defaults.telemetryEnabled = false;
-  if (existing.scrapeEnabled == null) defaults.scrapeEnabled = true;
+  if (existing.communityDataEnabled == null) {
+    defaults.communityDataEnabled = existing.scrapeEnabled !== false || !!existing.telemetryEnabled;
+  }
   if (existing.showAll == null) defaults.showAll = false;
   if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
+  if (existing.telemetryEnabled != null || existing.scrapeEnabled != null) {
+    await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
+  }
 
   // Ouvre la page d'onboarding au premier install
   if (details.reason === "install") {

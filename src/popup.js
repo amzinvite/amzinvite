@@ -89,9 +89,9 @@ async function persistSettings({ reschedule = false } = {}) {
   await chrome.storage.local.set({
     intervalMin: Math.max(5, parseInt($("intervalMin").value || "30", 10)),
     autoRequest: $("autoRequest").checked,
-    telemetryEnabled: $("telemetryEnabled").checked,
-    scrapeEnabled: $("scrapeEnabled").checked,
+    communityDataEnabled: $("communityDataEnabled").checked,
   });
+  await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   if (reschedule) {
     await sendMessage({ type: "reschedule-alarm" });
     await refreshNextCheck();
@@ -103,6 +103,7 @@ async function load() {
   const cfg = await chrome.storage.local.get([
     "intervalMin",
     "autoRequest",
+    "communityDataEnabled",
     "telemetryEnabled",
     "scrapeEnabled",
     "lastRun",
@@ -113,8 +114,10 @@ async function load() {
   $("version").textContent = `Version ${manifest?.version || "?"}`;
   setVal("intervalMin", cfg.intervalMin || 30);
   setChecked("autoRequest", cfg.autoRequest);
-  setChecked("telemetryEnabled", cfg.telemetryEnabled);
-  setChecked("scrapeEnabled", cfg.scrapeEnabled !== false);
+  setChecked(
+    "communityDataEnabled",
+    cfg.communityDataEnabled == null ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled) : cfg.communityDataEnabled,
+  );
   renderAutoRequestNote();
 
   await refreshList(cfg.lastRun, cfg.showAll);
@@ -362,11 +365,7 @@ $("autoRequest").addEventListener("change", async () => {
   await persistSettings();
 });
 
-$("telemetryEnabled").addEventListener("change", async () => {
-  await persistSettings();
-});
-
-$("scrapeEnabled").addEventListener("change", async () => {
+$("communityDataEnabled").addEventListener("change", async () => {
   await persistSettings();
 });
 

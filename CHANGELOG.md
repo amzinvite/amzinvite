@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1] — invitation state regression fix
+
+### Fixes
+- Corrige une regression de detection qui pouvait classer trop de produits en `already_requested`
+- Priorise les signaux Amazon visibles et actionnables pour distinguer `available`, `accepted` et `already_requested`
+- Aligne la logique de detection entre le background check et la visite manuelle d'une fiche produit
+
 ## [0.1.0] — initial release
 
 ### Features

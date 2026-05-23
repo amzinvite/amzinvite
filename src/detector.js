@@ -25,7 +25,6 @@ const REQUESTED_PHRASES = [
   "invitation demandée",
   "invitation déjà demandée",
   "l'invitation dépend de plusieurs facteurs",
-  "lien valide pendant 72 heures",
   // EN
   "you've requested an invitation",
   "you have requested an invitation",
@@ -51,12 +50,14 @@ const ACCEPTED_PHRASES = [
   "vous êtes invité à acheter",
   "votre invitation a été acceptée",
   "invitation acceptée",
+  "lien valide pendant 72 heures",
   // EN
   "you've been invited to buy",
   "you have been invited to buy",
   "you've been selected",
   "you have been selected",
   "your invitation has been accepted",
+  "valid for 72 hours",
 ];
 
 const AVAILABLE_PHRASES = [
@@ -71,6 +72,20 @@ const INVITATION_BUYBOX_SELECTORS = [
   "[id*='invitation' i]",
   "[data-feature-name='requestInvitation']",
   "[data-action*='invitation' i]",
+];
+
+const REQUEST_BUTTON_SELECTORS = [
+  "#requestInvitation",
+  "input[name='submit.inviteButton']",
+  "[data-feature-name='requestInvitation'] input",
+  "[data-feature-name='requestInvitation'] button",
+  "[data-action*='invitation' i] input",
+  "[data-action*='invitation' i] button",
+];
+
+const BUY_BUTTON_SELECTORS = [
+  "#add-to-cart-button:not([disabled])",
+  "#buy-now-button:not([disabled])",
 ];
 
 // Mapping des conteneurs d'état Amazon (format "high demand product").
@@ -88,12 +103,69 @@ const HDP_STATE_BLOCKS = [
 
 function blockHasContent(el) {
   if (!el) return false;
-  if (el.classList?.contains("aok-hidden")) return false;
+  if (!isElementVisible(el)) return false;
   // textContent.trim() écarte les blocs Amazon vides (juste des espaces).
   const txt = (el.textContent || "").trim();
   if (txt.length > 0) return true;
   // Fallback : présence d'éléments interactifs (bouton, input).
   return !!el.querySelector?.("input, button, a[role='button']");
+}
+
+function normalizeText(value) {
+  return String(value || "").toLowerCase();
+}
+
+function includesAny(text, phrases) {
+  return phrases.some((phrase) => text.includes(phrase));
+}
+
+function isElementVisible(el) {
+  if (!el) return false;
+  if (el.hidden) return false;
+  if (el.getAttribute?.("aria-hidden") === "true") return false;
+  if (el.classList?.contains("aok-hidden")) return false;
+  const style = el.ownerDocument?.defaultView?.getComputedStyle?.(el);
+  if (!style) return true;
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function hasVisibleMatch(root, selectors) {
+  if (!root?.querySelectorAll) return false;
+  for (const sel of selectors) {
+    try {
+      const nodes = root.querySelectorAll(sel);
+      for (const node of nodes) {
+        if (isElementVisible(node)) return true;
+      }
+    } catch (_) {
+      /* sélecteur invalide sur ce moteur — on continue */
+    }
+  }
+  return false;
+}
+
+function detectHdpStateFromDom(doc) {
+  const candidates = HDP_STATE_BLOCKS
+    .map(({ id, state }) => ({ el: doc.getElementById?.(id), state }))
+    .filter(({ el }) => blockHasContent(el));
+
+  for (const { el, state } of candidates) {
+    const text = normalizeText(el.textContent);
+    if (state === "available" && hasVisibleMatch(el, REQUEST_BUTTON_SELECTORS)) return state;
+    if (state === "accepted" && (hasVisibleMatch(el, BUY_BUTTON_SELECTORS) || includesAny(text, ACCEPTED_PHRASES))) return state;
+    if (state === "already_requested" && includesAny(text, REQUESTED_PHRASES)) return state;
+  }
+
+  for (const { el, state } of candidates) {
+    const text = normalizeText(el.textContent);
+    if (state === "accepted" && includesAny(text, ACCEPTED_PHRASES)) return state;
+    if (state === "available" && includesAny(text, AVAILABLE_PHRASES)) return state;
+    if (state === "already_requested" && (includesAny(text, REQUESTED_PHRASES) || hasVisibleMatch(el, REQUEST_BUTTON_SELECTORS))) {
+      return state;
+    }
+  }
+
+  return null;
 }
 
 // Détection HDP depuis du HTML brut (sans DOMParser, indispo dans SW MV3).
@@ -137,10 +209,23 @@ function detectHdpStateFromHtml(html) {
     if (tagEnd === -1) continue;
     const closeIdx = findMatchingDivClose(html, tagEnd + 1);
     if (closeIdx === -1) continue;
+    const openTag = html.slice(attrIdx, tagEnd);
+    if (/aok-hidden|display\s*:\s*none|visibility\s*:\s*hidden|aria-hidden\s*=\s*["']true["']/i.test(openTag)) {
+      continue;
+    }
     const inner = html.slice(tagEnd + 1, closeIdx);
-    // Strip tags + whitespace pour mesurer le vrai contenu textuel.
-    const size = inner.replace(/<[^>]+>/g, "").replace(/\s+/g, "").length;
-    if (size >= HDP_FILLED_MIN_CHARS) return state;
+    const text = normalizeText(inner.replace(/<[^>]+>/g, " "));
+    const size = text.replace(/\s+/g, "").length;
+    if (size < HDP_FILLED_MIN_CHARS) continue;
+    if (state === "available" && (/#requestInvitation\b|submit\.inviteButton|request an invitation|demander une invitation/i.test(inner))) {
+      return state;
+    }
+    if (state === "accepted" && (/#add-to-cart-button\b|#buy-now-button\b|add-to-cart-button|buy-now-button/i.test(inner) || includesAny(text, ACCEPTED_PHRASES))) {
+      return state;
+    }
+    if (state === "already_requested" && includesAny(text, REQUESTED_PHRASES)) {
+      return state;
+    }
   }
   return null;
 }
@@ -155,17 +240,18 @@ export function detectInvitationState(rootText, doc, rawHtml) {
   //    enfin `available`. Le path DOM est utilisé côté content script,
   //    le path regex côté service worker (pas de DOMParser dispo en SW MV3).
   if (doc) {
-    for (const { id, state } of HDP_STATE_BLOCKS) {
-      const el = doc.getElementById?.(id);
-      if (blockHasContent(el)) return state;
-    }
+    const hdpState = detectHdpStateFromDom(doc);
+    if (hdpState) return hdpState;
   } else if (rawHtml) {
     const hdpState = detectHdpStateFromHtml(rawHtml);
     if (hdpState) return hdpState;
   }
 
   // 2) Fallback texte/sélecteurs pour les pages au format historique.
-  const txt = (rootText || "").toLowerCase();
+  const txt = normalizeText(rootText);
+  if (includesAny(txt, ACCEPTED_PHRASES)) {
+    return "accepted";
+  }
   if (REQUESTED_PHRASES.some((p) => txt.includes(p))) {
     return "already_requested";
   }
@@ -174,8 +260,11 @@ export function detectInvitationState(rootText, doc, rawHtml) {
       try {
         const el = doc.querySelector(sel);
         if (el) {
-          const elText = (el.textContent || "").toLowerCase();
-          if (REQUESTED_PHRASES.some((p) => elText.includes(p))) {
+          const elText = normalizeText(el.textContent);
+          if (includesAny(elText, ACCEPTED_PHRASES) || hasVisibleMatch(el, BUY_BUTTON_SELECTORS)) {
+            return "accepted";
+          }
+          if (includesAny(elText, REQUESTED_PHRASES)) {
             return "already_requested";
           }
           if (el.disabled === true || el.hasAttribute?.("disabled")) {
@@ -188,7 +277,7 @@ export function detectInvitationState(rootText, doc, rawHtml) {
       }
     }
   }
-  if (AVAILABLE_PHRASES.some((p) => txt.includes(p))) {
+  if (includesAny(txt, AVAILABLE_PHRASES)) {
     return "available";
   }
 

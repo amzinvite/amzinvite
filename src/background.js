@@ -229,6 +229,56 @@ function extractProductNameFromHtml(html) {
     .trim();
 }
 
+function encodeNotificationUrl(url) {
+  const bytes = new TextEncoder().encode(String(url || ""));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeNotificationUrl(encoded) {
+  const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4 || 4)) % 4);
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function productNotificationId(kind, url) {
+  return `product:${kind}:${encodeNotificationUrl(url)}`;
+}
+
+function extractUrlFromNotificationId(notificationId) {
+  if (typeof notificationId !== "string" || !notificationId.startsWith("product:")) return null;
+  const parts = notificationId.split(":");
+  const encoded = parts.slice(2).join(":");
+  if (!encoded) return null;
+  try {
+    return decodeNotificationUrl(encoded);
+  } catch {
+    return null;
+  }
+}
+
+async function openNotificationProduct(notificationId) {
+  const url = extractUrlFromNotificationId(notificationId);
+  if (!url) return;
+  await chrome.tabs.create({ url });
+  await chrome.notifications.clear(notificationId).catch(() => {});
+}
+
+function createProductNotification(kind, { url, title, message, priority = 1 }) {
+  if (!url) return;
+  chrome.notifications.create(productNotificationId(kind, url), {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title,
+    message,
+    priority,
+    buttons: [{ title: "Ouvrir le produit" }],
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Feedback anonyme vers notre backend (opt-in)
 // ─────────────────────────────────────────────────────────────────────────
@@ -484,6 +534,14 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+chrome.notifications.onClicked.addListener((notificationId) => {
+  void openNotificationProduct(notificationId);
+});
+
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+  if (buttonIndex === 0) void openNotificationProduct(notificationId);
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // Messages depuis popup et content scripts
 // ─────────────────────────────────────────────────────────────────────────
@@ -688,9 +746,8 @@ async function runCheckOnce() {
               await sendFeedback(asin, "already_requested", "auto_request");
               summary.items[summary.items.length - 1].autoSuccess = true;
               summary.items[summary.items.length - 1].state = "already_requested";
-              chrome.notifications.create({
-                type: "basic",
-                iconUrl: "icons/icon128.png",
+              createProductNotification("auto_request", {
+                url: it.url,
                 title: "🤖 Invitation demandée automatiquement",
                 message: it.name || asin,
                 priority: 2,
@@ -704,17 +761,15 @@ async function runCheckOnce() {
 
       // Notif seulement lors des transitions actionnables pour eviter le spam.
       if (state === "accepted" && prevState !== "accepted") {
-        chrome.notifications.create({
-          type: "basic",
-          iconUrl: "icons/icon128.png",
+        createProductNotification("accepted", {
+          url: it.url,
           title: "🎉 Tu es sélectionné !",
           message: `${it.name || asin} — clique pour acheter (72h max)`,
           priority: 2,
         });
       } else if (state === "available" && prevState !== "available") {
-        chrome.notifications.create({
-          type: "basic",
-          iconUrl: "icons/icon128.png",
+        createProductNotification("available", {
+          url: it.url,
           title: "🎟️ Invitation dispo",
           message: it.name || asin,
           priority: 1,

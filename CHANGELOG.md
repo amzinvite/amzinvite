@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2] — worker hotfix
+
+### Fixes
+- Stabilise les notifications cliquables avec des identifiants courts
+- Restaure la detection conservative des etats Amazon pour eviter les faux `accepted`
+
 ## [0.1.1] — invitation state regression fix
 
 ### Fixes

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.4] — expired invitations
+
+### Fixes
+- Traite les invitations expirees comme `available` afin de permettre une nouvelle demande
+
 ## [0.1.3] — recheck pending invitations
 
 ### Fixes

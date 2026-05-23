@@ -9,7 +9,7 @@
     { id: "hdp_invited_desktop", state: "accepted" },
     { id: "hdp_requested_desktop", state: "already_requested" },
     { id: "hdp_notRequested_desktop", state: "available" },
-    { id: "hdp_expired_desktop", state: "already_requested" },
+    { id: "hdp_expired_desktop", state: "available" },
     { id: "hdp_consumed_desktop", state: "already_requested" },
   ];
 

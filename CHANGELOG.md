@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] — recheck pending invitations
+
+### Fixes
+- Recheck automatiquement les produits `already_requested` toutes les 4h afin de detecter leur passage en `accepted`
+- Permet au bouton "Check maintenant" de bypasser cette fenetre pour debug
+
 ## [0.1.2] — worker hotfix
 
 ### Fixes

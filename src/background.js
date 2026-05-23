@@ -27,6 +27,7 @@ const DEFAULT_INTERVAL_MIN = 30;
 const PER_REQUEST_DELAY_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 25_000;
 const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
+const ALREADY_REQUESTED_RECHECK_MS = 4 * 60 * 60 * 1000;
 const FEED_REFRESH_MS = 30 * 60 * 1000; // 30 min
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -173,6 +174,21 @@ async function setKnownState(url, state) {
   const { knownStates } = await chrome.storage.local.get("knownStates");
   const next = { ...(knownStates || {}), [asin]: state };
   await chrome.storage.local.set({ knownStates: next });
+}
+
+async function getLastStateCheckAt(url) {
+  const asin = asinFromUrl(url);
+  if (!asin) return 0;
+  const { stateCheckedAt } = await chrome.storage.local.get("stateCheckedAt");
+  return stateCheckedAt?.[asin] || 0;
+}
+
+async function markStateChecked(url) {
+  const asin = asinFromUrl(url);
+  if (!asin) return;
+  const { stateCheckedAt } = await chrome.storage.local.get("stateCheckedAt");
+  const next = { ...(stateCheckedAt || {}), [asin]: Date.now() };
+  await chrome.storage.local.set({ stateCheckedAt: next });
 }
 
 function asinFromUrl(url) {
@@ -543,7 +559,7 @@ chrome.notifications.onClosed?.addListener((notificationId) => {
 // ─────────────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "check-now") {
-    runCheck()
+    runCheck({ force: true })
       .then((res) => sendResponse({ ok: true, ...res }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
@@ -668,17 +684,17 @@ async function removeCustomUrl(url) {
 // runCheck — boucle principale de vérification des invitations
 // ─────────────────────────────────────────────────────────────────────────
 let activeRun = null;
-async function runCheck() {
+async function runCheck({ force = false } = {}) {
   if (activeRun) return activeRun;
   startKeepalive();
-  activeRun = runCheckOnce().finally(() => {
+  activeRun = runCheckOnce({ force }).finally(() => {
     activeRun = null;
     stopKeepalive();
   });
   return activeRun;
 }
 
-async function runCheckOnce() {
+async function runCheckOnce({ force = false } = {}) {
   const summary = { checked: 0, errors: 0, items: [] };
   await chrome.storage.local.set({
     checkProgress: { startedAt: Date.now(), phase: "watchlist", current: 0, total: 0 },
@@ -707,11 +723,12 @@ async function runCheckOnce() {
       },
     });
     try {
-      // Skip les états figés (déjà demandé ou accepté), sauf accepted qu'on
-      // re-check pour détecter le rachat / la sortie de fenêtre 72h.
-      if (it.known_state === "already_requested") {
-        summary.items.push({ url: it.url, state: it.known_state, skipped: true });
-        continue;
+      if (it.known_state === "already_requested" && !force) {
+        const lastCheckedAt = await getLastStateCheckAt(it.url);
+        if (lastCheckedAt && Date.now() - lastCheckedAt < ALREADY_REQUESTED_RECHECK_MS) {
+          summary.items.push({ url: it.url, state: it.known_state, skipped: true, reason: "recently_checked" });
+          continue;
+        }
       }
 
       const html = await fetchAmazonPage(it.url);
@@ -726,6 +743,7 @@ async function runCheckOnce() {
       const asin = asinFromUrl(it.url);
       const prevState = it.known_state || null;
       await setKnownState(it.url, state);
+      await markStateChecked(it.url);
       await sendFeedback(asin, state, "bg_check");
       summary.checked++;
       summary.items.push({ url: it.url, state });

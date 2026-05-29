@@ -4,6 +4,7 @@ let nextCheckTimer = null;
 let activeFilter = "all";
 let currentItems = [];
 let currentLastRun = null;
+let currentScanUrl = null;
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
@@ -88,6 +89,17 @@ function renderAutoRequestNote() {
   $("autoRequestNote").classList.toggle("open", $("autoRequest").checked);
 }
 
+async function renderPokemonFeedDate() {
+  const el = $("pokemonFeedDate");
+  if (!el) return;
+  const enabled = $("trackPokemonTcgFr")?.checked;
+  if (!enabled) { el.hidden = true; return; }
+  const { publicFeedFetchedAt } = await chrome.storage.local.get("publicFeedFetchedAt");
+  if (!publicFeedFetchedAt) { el.hidden = true; return; }
+  el.textContent = `Dernier import du feed : ${relativeTime(publicFeedFetchedAt)}`;
+  el.hidden = false;
+}
+
 async function persistSettings({ reschedule = false } = {}) {
   await chrome.storage.local.set({
     intervalMin: Math.max(5, parseInt($("intervalMin").value || "30", 10)),
@@ -125,6 +137,7 @@ async function load() {
   );
   setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr);
   renderAutoRequestNote();
+  await renderPokemonFeedDate();
 
   await refreshList(cfg.lastRun, cfg.showAll);
   await refreshNextCheck();
@@ -134,6 +147,7 @@ async function load() {
       await chrome.storage.local.remove("checkProgress");
       setError("Check precedent interrompu. Reessaie.");
     } else {
+      currentScanUrl = cfg.checkProgress.currentUrl || null;
       renderCheckProgress(cfg.checkProgress);
       $("check").disabled = true;
     }
@@ -155,8 +169,16 @@ function startProgressListener() {
       if (next) {
         renderCheckProgress(next);
         $("check").disabled = true;
+        const newScanUrl = next.currentUrl || null;
+        if (newScanUrl !== currentScanUrl) {
+          currentScanUrl = newScanUrl;
+          rerenderCurrentList();
+        }
       } else {
+        const hadScanUrl = currentScanUrl !== null;
+        currentScanUrl = null;
         $("check").disabled = false;
+        if (hadScanUrl) rerenderCurrentList();
       }
     }
 
@@ -341,6 +363,9 @@ function renderList(items, showAll) {
 
   const order = { accepted: 0, available: 1, already_requested: 2 };
   const sorted = [...items].sort((a, b) => {
+    const aScanning = currentScanUrl && a.url === currentScanUrl ? 1 : 0;
+    const bScanning = currentScanUrl && b.url === currentScanUrl ? 1 : 0;
+    if (aScanning !== bScanning) return bScanning - aScanning;
     const sa = a.known_state || "z";
     const sb = b.known_state || "z";
     return (order[sa] ?? 99) - (order[sb] ?? 99);
@@ -365,7 +390,8 @@ function renderList(items, showAll) {
 
     const label = STATE_LABELS[state] || { txt: state, cls: "unknown" };
     const li = document.createElement("li");
-    li.className = "product";
+    const isScanning = currentScanUrl && item.url === currentScanUrl;
+    li.className = isScanning ? "product scanning" : "product";
 
     const pillTag = state === "accepted"
       ? `<a class="pill ${label.cls}" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${escapeHTML(label.txt)}</a>`
@@ -374,7 +400,11 @@ function renderList(items, showAll) {
       ? `<button class="remove" data-url="${escapeAttr(item.url)}" title="Retirer">×</button>`
       : "";
 
+    const imgTag = item.image_url
+      ? `<img class="product-thumb" src="${escapeAttr(item.image_url)}" alt="" loading="lazy" />`
+      : "";
     li.innerHTML = `
+      ${imgTag}
       <div class="body">
         <div class="name">${escapeHTML(item.name || asinFromUrl(item.url) || item.url)}</div>
         <div class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${escapeHTML(shortPath(item.url))}</a></div>
@@ -451,6 +481,7 @@ $("trackPokemonTcgFr").addEventListener("change", async () => {
   } else {
     await sendMessage({ type: "clear-public-feed" });
   }
+  await renderPokemonFeedDate();
   await refreshList();
 });
 

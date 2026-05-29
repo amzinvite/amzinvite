@@ -336,6 +336,11 @@
         font-size: 11px;
         line-height: 1.45;
       }
+      .feed-date {
+        font-size: 11px;
+        color: var(--text-muted);
+        padding: 2px 0 6px 0;
+      }
       .auto-note {
         display: none;
         padding: 11px 12px;
@@ -433,9 +438,21 @@
       li.product:last-child {
         margin-bottom: 0;
       }
+      li.product.scanning {
+        border-color: color-mix(in srgb, var(--blue, #3b82f6) 40%, var(--border));
+        background: color-mix(in srgb, var(--blue, #3b82f6) 6%, var(--surface-strong));
+      }
       li.product:has(.pill.accepted) {
         border-color: color-mix(in srgb, var(--green) 35%, var(--border));
         background: linear-gradient(90deg, color-mix(in srgb, var(--green-bg) 75%, transparent), transparent);
+      }
+      .product-thumb {
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
+        border-radius: 6px;
+        flex-shrink: 0;
+        background: var(--surface);
       }
       .body {
         flex: 1;
@@ -609,6 +626,7 @@
                   <span class="hint">Désactivé par défaut. Active cette option pour suivre automatiquement les produits Pokémon TCG FR du feed public.</span>
                 </span>
               </label>
+              <div id="pokemonFeedDate" class="feed-date" hidden></div>
 
               <label class="toggle-row">
                 <input id="autoRequest" type="checkbox" />

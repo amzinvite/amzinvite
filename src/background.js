@@ -24,7 +24,7 @@ const API_BASE = "https://amzinvite-api.amzinvite.workers.dev";
 const HMAC_SECRET = "0b950ea0a74ecd36f73218b7aef389bfe610e6053fe85371ddf4f351ff2ce89a";
 const ALARM_NAME = "invitation-check";
 const DEFAULT_INTERVAL_MIN = 30;
-const PER_REQUEST_DELAY_MS = 20_000;
+const PER_REQUEST_DELAY_MS = 8_000;
 const REQUEST_TIMEOUT_MS = 25_000;
 const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
 const ALREADY_REQUESTED_RECHECK_MS = 4 * 60 * 60 * 1000;
@@ -115,12 +115,13 @@ async function clearPublicFeed() {
 }
 
 async function getWatchlist() {
-  const { publicFeed, customUrls, knownStates, publicFeedFetchedAt } =
+  const { publicFeed, customUrls, knownStates, publicFeedFetchedAt, knownImages } =
     await chrome.storage.local.get([
       "publicFeed",
       "customUrls",
       "knownStates",
       "publicFeedFetchedAt",
+      "knownImages",
     ]);
   const { trackPokemonTcgFr } = await getSettings();
   let feed = [];
@@ -145,11 +146,15 @@ async function getWatchlist() {
     deduped.set(asin || item.url, item);
   }
   const all = [...deduped.values()];
-  // Attache l'état connu local à chaque item
-  return all.map((it) => ({
-    ...it,
-    known_state: states[asinFromUrl(it.url)] || null,
-  }));
+  const images = knownImages || {};
+  return all.map((it) => {
+    const asin = asinFromUrl(it.url);
+    return {
+      ...it,
+      known_state: states[asin] || null,
+      image_url: images[asin] || null,
+    };
+  });
 }
 
 async function updateActionBadge(items = null) {
@@ -230,6 +235,38 @@ function normalizeCustomEntry(entry) {
     name: entry?.name || shortPath(url),
     custom: true,
   };
+}
+
+function extractProductImageFromHtml(html) {
+  if (!html) return null;
+  // data-old-hires (highest res)
+  const hires = html.match(/data-old-hires="([^"]+)"/i);
+  if (hires?.[1] && hires[1].startsWith("http")) return hires[1];
+  // data-a-dynamic-image — JSON map { url: [w,h] }, pick largest area
+  const dynMatch = html.match(/data-a-dynamic-image="([^"]+)"/i);
+  if (dynMatch?.[1]) {
+    try {
+      const map = JSON.parse(dynMatch[1].replace(/&quot;/g, '"'));
+      const best = Object.entries(map).sort((a, b) => (b[1][0] * b[1][1]) - (a[1][0] * a[1][1]))[0];
+      if (best?.[0].startsWith("http")) return best[0];
+    } catch {}
+  }
+  // landingImage src
+  const srcMatch = html.match(/id="landingImage"[^>]+src="([^"]+)"/i);
+  if (srcMatch?.[1] && srcMatch[1].startsWith("http")) return srcMatch[1];
+  return null;
+}
+
+async function storeKnownImage(url, html) {
+  const asin = asinFromUrl(url);
+  if (!asin) return;
+  const { knownImages } = await chrome.storage.local.get("knownImages");
+  const images = knownImages || {};
+  if (images[asin]) return; // déjà en cache
+  const imageUrl = extractProductImageFromHtml(html);
+  if (!imageUrl) return;
+  images[asin] = imageUrl;
+  await chrome.storage.local.set({ knownImages: images });
 }
 
 function extractProductNameFromHtml(html) {
@@ -649,6 +686,7 @@ async function validateInvitationProductUrl(url) {
   if (state === "not_invitation") {
     throw new Error("Ce produit n'est pas actuellement en mode invitation.");
   }
+  await storeKnownImage(normalizedUrl, html);
   return { normalizedUrl, state, name: extractProductNameFromHtml(html) || shortPath(normalizedUrl) };
 }
 
@@ -738,6 +776,7 @@ async function runCheckOnce({ force = false } = {}) {
         continue;
       }
 
+      storeKnownImage(it.url, html).catch(() => {});
       const { text, doc, rawHtml } = extractBuyboxText(html);
       const state = detectInvitationState(text, doc, rawHtml);
       const asin = asinFromUrl(it.url);

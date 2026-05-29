@@ -594,6 +594,39 @@
         flex-shrink: 0;
         opacity: 0.7;
       }
+      .scan-single {
+        flex: 0 0 auto;
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        cursor: pointer;
+      }
+      .scan-single svg {
+        width: 13px;
+        height: 13px;
+      }
+      .scan-single:hover {
+        background: color-mix(in srgb, var(--blue, #3b82f6) 12%, transparent);
+        color: var(--blue, #3b82f6);
+      }
+      .scan-single.active {
+        background: color-mix(in srgb, var(--blue, #3b82f6) 12%, transparent);
+        color: var(--blue, #3b82f6);
+        font-size: 10px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        min-width: 28px;
+      }
+      .scan-single:disabled {
+        cursor: default;
+      }
       .remove {
         flex: 0 0 auto;
         width: 30px;

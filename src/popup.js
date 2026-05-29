@@ -12,6 +12,9 @@ let scanLastItemAt = null;
 let scanEmaMs = null;
 let scanEtaBaseMs = null;
 let scanEtaBaseAt = null;
+let singleScanUrl = null;
+let singleScanStartedAt = null;
+let singleScanCdTimer = null;
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
@@ -291,13 +294,7 @@ function renderHeader(items, lastRun) {
   $("stat-requested").textContent = counts.to_review;
   $("stat-total").textContent = items.length;
 
-  if (lastRun) {
-    const ago = relativeTime(lastRun.ts);
-    const errs = lastRun.errors ? ` · ${lastRun.errors} erreur(s)` : "";
-    $("sub").textContent = `Dernier check ${ago} · ${lastRun.checked || 0} OK${errs}`;
-  } else {
-    $("sub").textContent = "";
-  }
+  $("sub").textContent = "";
 }
 
 function shouldHideState(state, showAll) {
@@ -373,6 +370,19 @@ function stopNextCheckTimer() {
     clearInterval(nextCheckTimer);
     nextCheckTimer = null;
   }
+}
+
+const SINGLE_SCAN_CD_MS = 3_000;
+
+function startSingleScanCd() {
+  clearInterval(singleScanCdTimer);
+  singleScanCdTimer = setInterval(() => {
+    if (!singleScanStartedAt) return;
+    const btn = document.querySelector("li[data-scanning] .scan-single");
+    if (!btn) return;
+    const remaining = Math.max(0, SINGLE_SCAN_CD_MS - (Date.now() - singleScanStartedAt));
+    btn.textContent = `${Math.ceil(remaining / 1000)}s`;
+  }, 250);
 }
 
 function formatEta(ms) {
@@ -497,9 +507,11 @@ function renderList(items, showAll) {
     }
 
     const label = STATE_LABELS[state] || { txt: state, cls: "unknown" };
-    const li = document.createElement("li");
     const isScanning = currentScanUrl && item.url === currentScanUrl;
+    const isSingleScanning = singleScanUrl === item.url;
+    const li = document.createElement("li");
     li.className = isScanning ? "product scanning" : "product";
+    if (isSingleScanning) li.dataset.scanning = "1";
 
     const pillTag = state === "accepted"
       ? `<a class="pill ${label.cls}" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${escapeHTML(label.txt)}</a>`
@@ -507,6 +519,7 @@ function renderList(items, showAll) {
     const removeBtn = item.custom
       ? `<button class="remove" data-url="${escapeAttr(item.url)}" title="Retirer">×</button>`
       : "";
+    const scanBtn = `<button class="scan-single${isSingleScanning ? " active" : ""}" data-url="${escapeAttr(item.url)}" title="Vérifier maintenant"${isSingleScanning ? " disabled" : ""}>${isSingleScanning ? `${Math.ceil(Math.max(0, SINGLE_SCAN_CD_MS - (Date.now() - (singleScanStartedAt||Date.now()))) / 1000)}s` : `<svg viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 7 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M7 1.5h3.5V5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`}</button>`;
 
     const imgTag = item.image_url
       ? `<div class="product-thumb-wrap" data-img-url="${escapeAttr(item.image_url)}"><img class="product-thumb" src="${escapeAttr(item.image_url)}" alt="" loading="lazy" /></div>`
@@ -533,11 +546,32 @@ function renderList(items, showAll) {
         ${scanTag}
       </div>
       ${pillTag}
+      ${scanBtn}
       ${removeBtn}
     `;
     list.appendChild(li);
     rendered++;
   }
+
+  list.querySelectorAll(".scan-single").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const url = e.currentTarget.dataset.url;
+      if (singleScanUrl) return;
+      singleScanUrl = url;
+      singleScanStartedAt = Date.now();
+      await rerenderCurrentList();
+      startSingleScanCd();
+      const [,] = await Promise.all([
+        sendMessage({ type: "check-single", url }),
+        new Promise((r) => setTimeout(r, SINGLE_SCAN_CD_MS)),
+      ]);
+      clearInterval(singleScanCdTimer);
+      singleScanCdTimer = null;
+      singleScanUrl = null;
+      singleScanStartedAt = null;
+      await refreshList();
+    });
+  });
 
   list.querySelectorAll(".remove").forEach((btn) => {
     btn.addEventListener("click", async (e) => {

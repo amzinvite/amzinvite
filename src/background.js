@@ -595,6 +595,27 @@ chrome.notifications.onClosed?.addListener((notificationId) => {
 // Messages depuis popup et content scripts
 // ─────────────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "check-single") {
+    const url = msg.url;
+    (async () => {
+      try {
+        const normalizedUrl = normalizeAmazonProductUrl(url);
+        const html = await fetchAmazonPage(normalizedUrl);
+        if (isStub(html)) return sendResponse({ ok: false, error: "stub" });
+        storeKnownImage(normalizedUrl, html).catch(() => {});
+        const { text, doc, rawHtml } = extractBuyboxText(html);
+        const state = detectInvitationState(text, doc, rawHtml);
+        await setKnownState(normalizedUrl, state);
+        await markStateChecked(normalizedUrl);
+        await sendFeedback(asinFromUrl(normalizedUrl), state, "bg_check");
+        await updateActionBadge();
+        sendResponse({ ok: true, url: normalizedUrl, state });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
+    return true;
+  }
   if (msg?.type === "check-now") {
     runCheck({ force: true })
       .then((res) => sendResponse({ ok: true, ...res }))

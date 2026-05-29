@@ -595,6 +595,12 @@ chrome.notifications.onClosed?.addListener((notificationId) => {
 // Messages depuis popup et content scripts
 // ─────────────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "check-amazon-auth") {
+    chrome.cookies.get({ url: "https://www.amazon.fr", name: "at-acbfr" })
+      .then((cookie) => sendResponse({ ok: true, connected: !!cookie }))
+      .catch(() => sendResponse({ ok: true, connected: null }));
+    return true;
+  }
   if (msg?.type === "check-single") {
     const url = msg.url;
     (async () => {

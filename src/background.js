@@ -772,7 +772,21 @@ async function runCheckOnce({ force = false } = {}) {
       const html = await fetchAmazonPage(it.url);
       if (isStub(html)) {
         summary.items.push({ url: it.url, state: "stub_no_data" });
-        if (i < watchlist.length - 1) await sleep(jitteredDelay(PER_REQUEST_DELAY_MS));
+        if (i < watchlist.length - 1) {
+          const delay = jitteredDelay(PER_REQUEST_DELAY_MS);
+          await chrome.storage.local.set({
+            checkProgress: {
+              startedAt: Date.now(),
+              phase: "waiting",
+              current: i + 1,
+              total: watchlist.length,
+              currentUrl: it.url,
+              currentName: it.name,
+              waitMs: delay,
+            },
+          });
+          await sleep(delay);
+        }
         continue;
       }
 
@@ -832,7 +846,21 @@ async function runCheckOnce({ force = false } = {}) {
       summary.errors++;
       summary.items.push({ url: it.url, error: String(e) });
     }
-    if (i < watchlist.length - 1) await sleep(jitteredDelay(PER_REQUEST_DELAY_MS));
+    if (i < watchlist.length - 1) {
+      const delay = jitteredDelay(PER_REQUEST_DELAY_MS);
+      await chrome.storage.local.set({
+        checkProgress: {
+          startedAt: Date.now(),
+          phase: "waiting",
+          current: i + 1,
+          total: watchlist.length,
+          currentUrl: it.url,
+          currentName: it.name,
+          waitMs: delay,
+        },
+      });
+      await sleep(delay);
+    }
   }
 
   await chrome.storage.local.set({ lastRun: { ts: Date.now(), ...summary } });

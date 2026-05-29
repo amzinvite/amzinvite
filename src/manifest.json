@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "amzinvite — Amazon invitation tracker",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Surveille les produits Amazon en mode invitation et te prévient quand tu es sélectionné. Option d'auto-demande directe sans clic.",
-  "permissions": ["alarms", "storage", "notifications", "declarativeNetRequest"],
+  "permissions": ["alarms", "storage", "notifications", "declarativeNetRequest", "cookies"],
   "host_permissions": [
     "*://*.amazon.fr/*",
     "*://*.amazon.com/*",

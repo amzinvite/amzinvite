@@ -118,6 +118,16 @@
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
+      .eyebrow.connected {
+        background: color-mix(in srgb, var(--green) 12%, var(--surface-strong));
+        border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+        color: var(--green);
+      }
+      .eyebrow.disconnected {
+        background: color-mix(in srgb, var(--red, #ef4444) 10%, var(--surface-strong));
+        border-color: color-mix(in srgb, var(--red, #ef4444) 30%, var(--border));
+        color: var(--red, #ef4444);
+      }
       h1 {
         margin: 0;
         font-size: 15px;
@@ -336,6 +346,20 @@
         font-size: 11px;
         line-height: 1.45;
       }
+      .amazon-warn {
+        margin: 0 0 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--amber-bg);
+        color: var(--amber);
+        font-size: 11.5px;
+        line-height: 1.5;
+      }
+      .amazon-warn a {
+        color: var(--amber);
+        font-weight: 700;
+        text-decoration: underline;
+      }
       .feed-date {
         font-size: 11px;
         color: var(--text-muted);
@@ -420,7 +444,7 @@
       }
       ul.products {
         list-style: none;
-        padding: 0 10px 10px;
+        padding: 10px 10px 10px;
         margin: 0;
         max-height: 326px;
         overflow-y: auto;
@@ -439,20 +463,100 @@
         margin-bottom: 0;
       }
       li.product.scanning {
-        border-color: color-mix(in srgb, var(--blue, #3b82f6) 40%, var(--border));
-        background: color-mix(in srgb, var(--blue, #3b82f6) 6%, var(--surface-strong));
+        border-color: color-mix(in srgb, var(--blue, #3b82f6) 50%, var(--border));
+        background: color-mix(in srgb, var(--blue, #3b82f6) 8%, var(--surface-strong));
+      }
+      .scan-progress {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+        font-size: 10.5px;
+        color: var(--blue, #3b82f6);
+        font-weight: 500;
+      }
+      .scan-progress .spin {
+        width: 10px;
+        height: 10px;
+        border: 1.5px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      .scan-bar {
+        flex: 1;
+        height: 2px;
+        background: color-mix(in srgb, var(--blue, #3b82f6) 20%, transparent);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .scan-bar-fill {
+        height: 100%;
+        background: var(--blue, #3b82f6);
+        border-radius: 2px;
+        transition: width 0.3s ease;
+      }
+      .scan-cd {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.7;
+        min-width: 22px;
+        text-align: right;
+      }
+      .scan-eta {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.5;
+        font-size: 10px;
+        margin-left: 2px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
       li.product:has(.pill.accepted) {
         border-color: color-mix(in srgb, var(--green) 35%, var(--border));
         background: linear-gradient(90deg, color-mix(in srgb, var(--green-bg) 75%, transparent), transparent);
       }
+      .product-thumb-wrap {
+        width: 52px;
+        height: 52px;
+        flex-shrink: 0;
+        border-radius: 8px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+      .product-thumb-empty {
+        background: var(--surface);
+        border: 1px solid var(--border);
+      }
       .product-thumb {
-        width: 40px;
-        height: 40px;
+        width: 46px;
+        height: 46px;
         object-fit: contain;
         border-radius: 6px;
-        flex-shrink: 0;
-        background: var(--surface);
+      }
+      #img-preview {
+        position: fixed;
+        width: 130px;
+        height: 130px;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 6px 28px rgba(0,0,0,0.35);
+        border: 1px solid rgba(0,0,0,0.08);
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        pointer-events: none;
+        opacity: 0;
+        transform: scale(0.85);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+        z-index: 9999;
+      }
+      #img-preview.visible {
+        opacity: 1;
+        transform: scale(1);
       }
       .body {
         flex: 1;
@@ -477,9 +581,18 @@
       }
       .link a {
         text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
       }
       .link a:hover {
         text-decoration: underline;
+      }
+      .link-icon {
+        width: 10px;
+        height: 10px;
+        flex-shrink: 0;
+        opacity: 0.7;
       }
       .remove {
         flex: 0 0 auto;
@@ -551,6 +664,7 @@
     </style>
   </head>
   <body>
+    <div id="img-preview"></div>
     <div class="shell">
       <div class="panel">
         <div class="hero">
@@ -562,10 +676,9 @@
                 <div class="meta" id="version">Version —</div>
               </div>
             </div>
-            <div class="eyebrow">72h pour acheter</div>
+            <div class="eyebrow" id="amazon-status">●</div>
           </div>
           <div class="sub" id="sub">Chargement de ton suivi…</div>
-          <div class="meta" style="margin-top:8px">Auto-demande disponible dans les réglages, désactivée par défaut.</div>
         </div>
 
         <div class="stats">
@@ -648,8 +761,12 @@
           </div>
         </div>
 
+        <div id="amazon-warn" hidden class="amazon-warn">
+          ⚠️ Connecte-toi à Amazon pour que l'extension puisse vérifier tes invitations.
+          <a href="https://www.amazon.fr/ap/signin" target="_blank" rel="noopener">Se connecter →</a>
+        </div>
+
         <div class="list-header">
-          <p class="list-title" id="list-title">Suivi</p>
           <button class="text-button" id="toggle-hidden" type="button" hidden>Afficher tout</button>
         </div>
         <ul class="products" id="list"></ul>

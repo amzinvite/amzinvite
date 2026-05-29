@@ -5,6 +5,13 @@ let activeFilter = "all";
 let currentItems = [];
 let currentLastRun = null;
 let currentScanUrl = null;
+let currentScanProgress = null;
+let scanCdTimer = null;
+let scanRunStartedAt = null;
+let scanLastItemAt = null;
+let scanEmaMs = null;
+let scanEtaBaseMs = null;
+let scanEtaBaseAt = null;
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
@@ -100,6 +107,54 @@ async function renderPokemonFeedDate() {
   el.hidden = false;
 }
 
+async function renderAmazonStatus() {
+  const el = $("amazon-status");
+  const warn = $("amazon-warn");
+  try {
+    const cookie = await chrome.cookies.get({ url: "https://www.amazon.fr", name: "at-acbfr" });
+    if (cookie) {
+      if (el) { el.textContent = "● Connecté Amazon"; el.className = "eyebrow connected"; }
+      if (warn) warn.hidden = true;
+    } else {
+      if (el) { el.textContent = "● Non connecté"; el.className = "eyebrow disconnected"; }
+      if (warn) warn.hidden = false;
+    }
+  } catch {
+    if (el) { el.textContent = "● Amazon"; el.className = "eyebrow"; }
+    if (warn) warn.hidden = true;
+  }
+}
+
+function setupImagePreview() {
+  const preview = $("img-preview");
+  if (!preview) return;
+  let hideTimer = null;
+
+  document.addEventListener("mouseover", (e) => {
+    const wrap = e.target.closest(".product-thumb-wrap");
+    if (!wrap) return;
+    const url = wrap.dataset.imgUrl;
+    if (!url) return;
+    clearTimeout(hideTimer);
+    const rect = wrap.getBoundingClientRect();
+    preview.style.backgroundImage = `url('${url}')`;
+    const size = 130;
+    let top = rect.top + rect.height / 2 - size / 2;
+    let left = rect.left - size - 8;
+    if (left < 0) left = rect.right + 8;
+    top = Math.max(8, Math.min(top, window.innerHeight - size - 8));
+    preview.style.top = `${top}px`;
+    preview.style.left = `${left}px`;
+    preview.classList.add("visible");
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const wrap = e.target.closest(".product-thumb-wrap");
+    if (!wrap) return;
+    hideTimer = setTimeout(() => preview.classList.remove("visible"), 80);
+  });
+}
+
 async function persistSettings({ reschedule = false } = {}) {
   await chrome.storage.local.set({
     intervalMin: Math.max(5, parseInt($("intervalMin").value || "30", 10)),
@@ -138,6 +193,8 @@ async function load() {
   setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr);
   renderAutoRequestNote();
   await renderPokemonFeedDate();
+  renderAmazonStatus();
+  setupImagePreview();
 
   await refreshList(cfg.lastRun, cfg.showAll);
   await refreshNextCheck();
@@ -148,6 +205,11 @@ async function load() {
       setError("Check precedent interrompu. Reessaie.");
     } else {
       currentScanUrl = cfg.checkProgress.currentUrl || null;
+      scanRunStartedAt = Date.now();
+      scanLastItemAt = Date.now();
+      currentScanProgress = cfg.checkProgress.phase === "checking"
+        ? { current: cfg.checkProgress.current, total: cfg.checkProgress.total, startedAt: cfg.checkProgress.startedAt, waitMs: cfg.checkProgress.waitMs || null, phase: cfg.checkProgress.phase }
+        : null;
       renderCheckProgress(cfg.checkProgress);
       $("check").disabled = true;
     }
@@ -170,13 +232,40 @@ function startProgressListener() {
         renderCheckProgress(next);
         $("check").disabled = true;
         const newScanUrl = next.currentUrl || null;
-        if (newScanUrl !== currentScanUrl) {
-          currentScanUrl = newScanUrl;
+        const newProgress = (next.phase === "checking" || next.phase === "waiting")
+          ? { current: next.current, total: next.total, startedAt: next.startedAt, waitMs: next.waitMs || null, phase: next.phase }
+          : null;
+        if (newProgress && !scanRunStartedAt) scanRunStartedAt = Date.now();
+        const urlChanged = newScanUrl !== currentScanUrl;
+        const progressChanged = newProgress?.current !== currentScanProgress?.current;
+        currentScanUrl = newScanUrl;
+        currentScanProgress = newProgress;
+        if (urlChanged || progressChanged) {
+          if (progressChanged && currentScanProgress) {
+            const now = Date.now();
+            if (scanLastItemAt) {
+              const cycleMs = now - scanLastItemAt;
+              scanEmaMs = scanEmaMs === null ? cycleMs : scanEmaMs * 0.7 + cycleMs * 0.3;
+            }
+            scanLastItemAt = now;
+            if (scanEmaMs !== null) {
+              scanEtaBaseMs = (currentScanProgress.total - currentScanProgress.current) * scanEmaMs;
+              scanEtaBaseAt = now;
+            }
+          }
           rerenderCurrentList();
+          if (currentScanProgress) startScanCd();
         }
       } else {
         const hadScanUrl = currentScanUrl !== null;
         currentScanUrl = null;
+        currentScanProgress = null;
+        scanRunStartedAt = null;
+        scanLastItemAt = null;
+        scanEmaMs = null;
+        scanEtaBaseMs = null;
+        scanEtaBaseAt = null;
+        stopScanCd();
         $("check").disabled = false;
         if (hadScanUrl) rerenderCurrentList();
       }
@@ -188,17 +277,7 @@ function startProgressListener() {
   });
 }
 
-function renderCheckProgress(progress) {
-  if (!progress) return;
-  if (progress.phase === "watchlist") {
-    $("sub").textContent = "Check en cours…";
-    return;
-  }
-  if (progress.phase === "checking") {
-    const name = progress.currentName ? ` · ${truncate(progress.currentName, 34)}` : "";
-    $("sub").textContent = `Check en cours… ${progress.current}/${progress.total}${name}`;
-  }
-}
+function renderCheckProgress() {}
 
 function renderHeader(items, lastRun) {
   const counts = { accepted: 0, to_review: 0 };
@@ -217,7 +296,7 @@ function renderHeader(items, lastRun) {
     const errs = lastRun.errors ? ` · ${lastRun.errors} erreur(s)` : "";
     $("sub").textContent = `Dernier check ${ago} · ${lastRun.checked || 0} OK${errs}`;
   } else {
-    $("sub").textContent = items.length ? `${items.length} produit(s) suivis` : "Surveille tes invitations sans bruit";
+    $("sub").textContent = "";
   }
 }
 
@@ -296,6 +375,36 @@ function stopNextCheckTimer() {
   }
 }
 
+function formatEta(ms) {
+  const s = Math.ceil(ms / 1000);
+  if (s <= 0) return "0s";
+  return s >= 60 ? `${Math.floor(s / 60)}min${s % 60 > 0 ? ` ${s % 60}s` : ""}` : `${s}s`;
+}
+
+function startScanCd() {
+  stopScanCd();
+  scanCdTimer = setInterval(() => {
+    const cd = $("scan-cd");
+    if (cd && currentScanProgress?.startedAt) {
+      if (currentScanProgress.phase === "waiting" && currentScanProgress.waitMs) {
+        const remaining = Math.max(0, currentScanProgress.waitMs - (Date.now() - currentScanProgress.startedAt));
+        cd.textContent = `${Math.ceil(remaining / 1000)}s`;
+      } else {
+        cd.textContent = "…";
+      }
+    }
+    const eta = $("scan-eta");
+    if (eta && scanEtaBaseMs !== null && scanEtaBaseAt !== null) {
+      const remaining = Math.max(0, scanEtaBaseMs - (Date.now() - scanEtaBaseAt));
+      eta.textContent = formatEta(remaining);
+    }
+  }, 250);
+}
+
+function stopScanCd() {
+  if (scanCdTimer) { clearInterval(scanCdTimer); scanCdTimer = null; }
+}
+
 function formatCountdown(ms) {
   const totalSec = Math.ceil(ms / 1000);
   const h = Math.floor(totalSec / 3600);
@@ -354,7 +463,6 @@ function renderList(items, showAll) {
   list.innerHTML = "";
 
   if (!items.length) {
-    $("list-title").textContent = "Suivi";
     $("toggle-hidden").hidden = true;
     renderEmptyContent();
     renderEmpty(true);
@@ -401,13 +509,28 @@ function renderList(items, showAll) {
       : "";
 
     const imgTag = item.image_url
-      ? `<img class="product-thumb" src="${escapeAttr(item.image_url)}" alt="" loading="lazy" />`
-      : "";
+      ? `<div class="product-thumb-wrap" data-img-url="${escapeAttr(item.image_url)}"><img class="product-thumb" src="${escapeAttr(item.image_url)}" alt="" loading="lazy" /></div>`
+      : `<div class="product-thumb-wrap product-thumb-empty"></div>`;
+
+    let scanTag = "";
+    if (isScanning && currentScanProgress) {
+      const { current, total } = currentScanProgress;
+      const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+      scanTag = `<div class="scan-progress">
+        <span class="spin"></span>
+        <span>${current}/${total}</span>
+        <div class="scan-bar"><div class="scan-bar-fill" style="width:${pct}%"></div></div>
+        <span id="scan-cd" class="scan-cd"></span>
+        <span id="scan-eta" class="scan-eta"></span>
+      </div>`;
+    }
+
     li.innerHTML = `
       ${imgTag}
       <div class="body">
-        <div class="name">${escapeHTML(item.name || asinFromUrl(item.url) || item.url)}</div>
-        <div class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${escapeHTML(shortPath(item.url))}</a></div>
+        <div class="name" title="${escapeAttr(item.name || asinFromUrl(item.url) || item.url)}">${escapeHTML(item.name || asinFromUrl(item.url) || item.url)}</div>
+        <div class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asinFromUrl(item.url) || shortPath(item.url))}</a></div>
+        ${scanTag}
       </div>
       ${pillTag}
       ${removeBtn}
@@ -432,9 +555,6 @@ function renderList(items, showAll) {
     toggle.hidden = true;
   }
 
-  $("list-title").textContent = hiddenCount && !showAll
-    ? `Suivi · ${rendered} visibles`
-    : `Suivi · ${rendered}`;
 
   if (rendered === 0 && hiddenCount > 0) {
     $("empty").innerHTML = `

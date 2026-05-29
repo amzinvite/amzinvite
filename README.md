@@ -10,6 +10,9 @@ Extension Chrome qui surveille les produits Amazon en mode invitation et te pré
 - permet d'ajouter un lien Amazon manuellement à ton suivi local
 - propose une option d'auto-demande, désactivée par défaut
 - permet de désactiver à tout moment le partage anonyme utilisé pour améliorer le service
+- affiche les miniatures produits extraites depuis Amazon
+- indique si tu es connecté à ton compte Amazon
+- scan individuel par produit depuis le popup
 
 ## Installation
 
@@ -28,18 +31,19 @@ Lien à venir.
 
 | Option | Défaut | Description |
 |---|---|---|
-| Intervalle auto | 30 min | Fréquence de vérification |
+| Intervalle auto | 30 min | Fréquence de vérification automatique |
 | Partage anonyme | ON | Aide à améliorer le feed et le catalogue |
-| Suivi POKÉMON TCG FR | OFF | Active le suivi automatique du feed public pour cette catégorie |
+| Suivi POKÉMON TCG FR | OFF | Active le suivi automatique du feed public |
 | Auto-demander | OFF | Envoie la demande d'invitation automatiquement |
 
-## Suivi
+## Suivi et interface
 
 - sans option activée, l'extension ne suit rien automatiquement
 - tu peux ajouter un produit manuellement via son lien Amazon en mode invitation
 - tu peux activer le suivi automatique de POKÉMON TCG FR depuis les réglages
-- quand cette option est activée, l'extension charge et suit le feed public correspondant
-- quand rien n'est suivi, l'extension ne planifie pas de check automatique
+- l'item en cours de vérification remonte en tête de liste avec une barre de progression, un compte à rebours et un ETA global
+- un bouton de scan individuel permet de relancer un check unitaire sur n'importe quel produit
+- les miniatures sont extraites automatiquement lors des checks et mises en cache localement
 
 ## Confidentialité
 
@@ -52,11 +56,14 @@ Voir [PRIVACY.md](./PRIVACY.md).
 
 ## Structure
 
-- `src/background.js` : logique principale de l'extension
+- `src/background.js` : logique principale (checks, watchlist, feed, notifications)
 - `src/popup.html` et `src/popup.js` : interface du popup
 - `src/onboarding.html` : écran de bienvenue
-- `src/content.js` : détection d'état sur les pages produit
-- `src/detector.js` : détection de l'état invitation
+- `src/content.js` : détection d'état sur les pages produit Amazon
+- `src/detector.js` : logique de détection des états invitation
+- `src/amazon-dom.js` : extraction des données produit depuis le DOM Amazon
+- `src/scrape-amazon-product.js` : scraping des pages produit
+- `src/scrape-amazon-listing.js` : scraping des pages listing
 
 ## Avertissement
 

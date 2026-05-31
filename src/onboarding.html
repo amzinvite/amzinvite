@@ -5,40 +5,25 @@
     <title>Bienvenue sur amzinvite</title>
     <style>
       :root {
-        --bg: #f6ede8;
-        --surface: #fffaf6;
-        --border: #eed9cf;
-        --text: #2d1813;
-        --text-soft: #754c41;
-        --muted: #957266;
+        --bg: #ffffff;
+        --surface: #ffffff;
+        --border: #ececf0;
+        --text: #1c1b1f;
+        --text-soft: #54515a;
+        --muted: #8a8790;
         --brand: #b53a2c;
         --brand-strong: #8f2219;
         --brand-soft: #fde9e2;
         --accent: #f3b16f;
-        --shadow: 0 18px 50px rgba(113, 49, 33, 0.1);
+        --shadow: 0 18px 50px rgba(20, 20, 30, 0.08);
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #140f0d;
-          --surface: #1f1714;
-          --border: #352522;
-          --text: #f9ede6;
-          --text-soft: #d9b8aa;
-          --muted: #b79284;
-          --brand: #ef6d5d;
-          --brand-strong: #ff8b73;
-          --brand-soft: #301d19;
-          --accent: #efb76f;
-          --shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
-        }
-      }
+      /* Thème clair forcé : fond blanc en permanence, quel que soit le
+         thème système (pas de variante prefers-color-scheme: dark). */
       * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
-        background:
-          radial-gradient(circle at top left, rgba(255,255,255,0.55), transparent 30%),
-          linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg) 84%, #ffffff 16%));
+        background: var(--bg);
         color: var(--text);
         font: 15px/1.65 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
@@ -57,9 +42,7 @@
       }
       .hero {
         padding: 34px 34px 28px;
-        background:
-          radial-gradient(circle at top right, rgba(243, 177, 111, 0.2), transparent 30%),
-          linear-gradient(180deg, color-mix(in srgb, var(--brand-soft) 70%, transparent), transparent 75%);
+        background: var(--surface);
         border-bottom: 1px solid var(--border);
       }
       .hero-brand {

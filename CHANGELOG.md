@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9] — interface en thème clair (fond blanc)
+
+### Changes
+- Popup et page d'onboarding passées sur un fond blanc épuré (surfaces et bordures neutres, accents de marque conservés)
+- Suppression de la variante `prefers-color-scheme: dark` : l'interface reste blanche en permanence, quel que soit le thème système
+- Les miniatures produits (images Amazon transparentes) rendent mieux sur le fond blanc
+
 ## [0.1.8] — temps restant invitation affiché dans la popup
 
 ### Features

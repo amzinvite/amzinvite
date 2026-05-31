@@ -5,14 +5,14 @@
     <title>amzinvite</title>
     <style>
       :root {
-        --bg: #f6ede8;
-        --surface: #fffaf6;
+        --bg: #ffffff;
+        --surface: #ffffff;
         --surface-strong: #ffffff;
-        --border: #f0ddd4;
-        --border-strong: #d8b3a3;
-        --text: #2b1712;
-        --text-soft: #6f4a3f;
-        --muted: #97756a;
+        --border: #ececf0;
+        --border-strong: #d4d6dc;
+        --text: #1c1b1f;
+        --text-soft: #54515a;
+        --muted: #8a8790;
         --brand: #b53a2c;
         --brand-strong: #8f2219;
         --brand-soft: #fde8e2;
@@ -29,40 +29,13 @@
         --red-bg: #fde6e1;
         --shadow-sm: 0 10px 24px rgba(113, 49, 33, 0.08);
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #140f0d;
-          --surface: #1e1715;
-          --surface-strong: #251c19;
-          --border: #342523;
-          --border-strong: #55352d;
-          --text: #f8ede7;
-          --text-soft: #d8b9ac;
-          --muted: #b48f81;
-          --brand: #ef6d5d;
-          --brand-strong: #ff8b73;
-          --brand-soft: #321d19;
-          --accent: #f0b062;
-          --green: #61d39a;
-          --green-bg: #11271d;
-          --blue: #85aef8;
-          --blue-bg: #15243d;
-          --amber: #f4bf79;
-          --amber-bg: #362414;
-          --gray: #b7aba6;
-          --gray-bg: #261f1d;
-          --red: #ff9a88;
-          --red-bg: #3a1c18;
-          --shadow-sm: 0 14px 30px rgba(0, 0, 0, 0.26);
-        }
-      }
+      /* Thème clair forcé : fond blanc en permanence, quel que soit le
+         thème système (pas de variante prefers-color-scheme: dark). */
       * { box-sizing: border-box; }
       body {
         margin: 0;
         width: 392px;
-        background:
-          radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 34%),
-          linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg) 84%, #ffffff 16%));
+        background: var(--bg);
         color: var(--text);
         font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
@@ -80,9 +53,7 @@
       }
       .hero {
         padding: 18px 18px 16px;
-        background:
-          radial-gradient(circle at top right, rgba(243, 177, 111, 0.2), transparent 30%),
-          linear-gradient(180deg, color-mix(in srgb, var(--brand-soft) 70%, transparent), transparent 75%);
+        background: var(--surface-strong);
         border-bottom: 1px solid var(--border);
       }
       .hero-top {

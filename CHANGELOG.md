@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.10] — SEO fiche store
+
+### Changes
+- Titre et résumé du manifest optimisés pour la recherche Chrome Web Store (axe « invitations Amazon Pokémon TCG »)
+- Incrément de version pour la soumission au store
+
 ## [0.1.9] — interface en thème clair (fond blanc)
 
 ### Changes

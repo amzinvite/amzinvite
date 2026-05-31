@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "amzinvite — Amazon invitation tracker",
+  "name": "amzinvite — Invitations Amazon Pokémon TCG",
   "version": "0.1.9",
-  "description": "Surveille les produits Amazon en mode invitation et te prévient quand tu es sélectionné. Option d'auto-demande directe sans clic.",
+  "description": "Ne ratez plus les ETB et coffrets Pokémon TCG disponibles sur invitation Amazon : surveillance auto, alertes et demande en un clic.",
   "permissions": [
     "alarms",
     "storage",

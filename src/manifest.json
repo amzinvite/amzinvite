@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
   "name": "amzinvite — Amazon invitation tracker",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Surveille les produits Amazon en mode invitation et te prévient quand tu es sélectionné. Option d'auto-demande directe sans clic.",
-  "permissions": ["alarms", "storage", "notifications", "declarativeNetRequest", "cookies"],
+  "permissions": [
+    "alarms",
+    "storage",
+    "notifications",
+    "declarativeNetRequest",
+    "cookies"
+  ],
   "host_permissions": [
     "*://*.amazon.fr/*",
     "*://*.amazon.com/*",
@@ -39,7 +45,11 @@
         "*://*.amazon.com/dp/*",
         "*://*.amazon.com/gp/product/*"
       ],
-      "js": ["amazon-dom.js", "content.js", "scrape-amazon-product.js"],
+      "js": [
+        "amazon-dom.js",
+        "content.js",
+        "scrape-amazon-product.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -49,7 +59,10 @@
         "*://*.amazon.fr/stores/page/*",
         "*://*.amazon.com/stores/page/*"
       ],
-      "js": ["amazon-dom.js", "scrape-amazon-listing.js"],
+      "js": [
+        "amazon-dom.js",
+        "scrape-amazon-listing.js"
+      ],
       "run_at": "document_idle"
     }
   ]

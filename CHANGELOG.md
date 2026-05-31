@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8] — temps restant invitation affiché dans la popup
+
+### Features
+- Affichage du temps restant avant expiration de l'invitation quand l'état est "Sélectionné" (badge vert ⏱ dans la liste)
+- Extraction depuis `#expiryTime` (DOM) lors de la visite de la page, et depuis le HTML brut lors des checks automatiques
+- Le temps est actualisé à chaque scan (check auto ou scan solo)
+
 ## [0.1.7] — scan solo, ETA global, nettoyage popup
 
 ### Features

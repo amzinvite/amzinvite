@@ -115,13 +115,14 @@ async function clearPublicFeed() {
 }
 
 async function getWatchlist() {
-  const { publicFeed, customUrls, knownStates, publicFeedFetchedAt, knownImages } =
+  const { publicFeed, customUrls, knownStates, publicFeedFetchedAt, knownImages, knownExpiry } =
     await chrome.storage.local.get([
       "publicFeed",
       "customUrls",
       "knownStates",
       "publicFeedFetchedAt",
       "knownImages",
+      "knownExpiry",
     ]);
   const { trackPokemonTcgFr } = await getSettings();
   let feed = [];
@@ -147,12 +148,14 @@ async function getWatchlist() {
   }
   const all = [...deduped.values()];
   const images = knownImages || {};
+  const expiry = knownExpiry || {};
   return all.map((it) => {
     const asin = asinFromUrl(it.url);
     return {
       ...it,
       known_state: states[asin] || null,
       image_url: images[asin] || null,
+      expiry_info: expiry[asin] || null,
     };
   });
 }
@@ -179,6 +182,28 @@ async function setKnownState(url, state) {
   const { knownStates } = await chrome.storage.local.get("knownStates");
   const next = { ...(knownStates || {}), [asin]: state };
   await chrome.storage.local.set({ knownStates: next });
+}
+
+function extractExpiryTextFromHtml(html) {
+  if (!html) return null;
+  const m = html.match(/id="expiryTime"[^>]*>([^<]+)</i);
+  if (m?.[1]?.trim()) return m[1].trim();
+  const m2 = html.match(/vous\s+avez\s+([^<]{3,60}?)\s+avant\s+l.expiration/i);
+  if (m2?.[1]) return m2[1].replace(/<[^>]+>/g, "").trim();
+  return null;
+}
+
+async function setKnownExpiry(url, expiryText) {
+  const asin = asinFromUrl(url);
+  if (!asin) return;
+  const { knownExpiry } = await chrome.storage.local.get("knownExpiry");
+  const next = { ...(knownExpiry || {}) };
+  if (expiryText) {
+    next[asin] = { text: expiryText, checkedAt: Date.now() };
+  } else {
+    delete next[asin];
+  }
+  await chrome.storage.local.set({ knownExpiry: next });
 }
 
 async function getLastStateCheckAt(url) {
@@ -612,6 +637,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const { text, doc, rawHtml } = extractBuyboxText(html);
         const state = detectInvitationState(text, doc, rawHtml);
         await setKnownState(normalizedUrl, state);
+        await setKnownExpiry(normalizedUrl, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
         await markStateChecked(normalizedUrl);
         await sendFeedback(asinFromUrl(normalizedUrl), state, "bg_check");
         await updateActionBadge();
@@ -669,6 +695,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         await Promise.all([
           setKnownState(msg.url, msg.state),
+          setKnownExpiry(msg.url, msg.state === "accepted" ? (msg.expiryText || null) : null),
           sendFeedback(asin, msg.state, "manual_visit"),
         ]);
       } catch (e) {
@@ -823,6 +850,7 @@ async function runCheckOnce({ force = false } = {}) {
       const asin = asinFromUrl(it.url);
       const prevState = it.known_state || null;
       await setKnownState(it.url, state);
+      await setKnownExpiry(it.url, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
       await markStateChecked(it.url);
       await sendFeedback(asin, state, "bg_check");
       summary.checked++;

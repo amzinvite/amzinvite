@@ -26,11 +26,24 @@
     return !!el.querySelector?.("input, button, a[role='button']");
   }
 
+  function detectExpiryText() {
+    const el = document.getElementById("expiryTime");
+    if (el) return el.textContent?.trim() || null;
+    const invitedEl = document.getElementById("hdp-detail-invited-id");
+    if (invitedEl) {
+      const m = (invitedEl.textContent || "").match(/vous\s+avez\s+(.+?)\s+avant/i);
+      if (m) return m[1].trim();
+    }
+    return null;
+  }
+
   function detect() {
     for (const { id, state } of HDP_STATE_BLOCKS) {
-      if (blockHasContent(document.getElementById(id))) return state;
+      if (blockHasContent(document.getElementById(id))) {
+        return { state, expiryText: state === "accepted" ? detectExpiryText() : null };
+      }
     }
-    return "not_invitation";
+    return { state: "not_invitation", expiryText: null };
   }
 
   function canonicalUrl() {
@@ -159,7 +172,7 @@
 
   setTimeout(() => {
     try {
-      const state = detect();
+      const { state, expiryText } = detect();
       const url = canonicalUrl();
 
       if (state === "not_invitation") return;
@@ -175,7 +188,7 @@
       });
 
       chrome.runtime.sendMessage(
-        { type: "report-state", url, state },
+        { type: "report-state", url, state, expiryText },
         () => { void chrome.runtime.lastError; },
       );
     } catch (e) {

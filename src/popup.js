@@ -538,11 +538,16 @@ function renderList(items, showAll) {
       </div>`;
     }
 
+    const expiryTag = state === "accepted" && item.expiry_info?.text
+      ? `<div class="expiry-text">⏱ ${escapeHTML(item.expiry_info.text)}</div>`
+      : "";
+
     li.innerHTML = `
       ${imgTag}
       <div class="body">
         <div class="name" title="${escapeAttr(item.name || asinFromUrl(item.url) || item.url)}">${escapeHTML(item.name || asinFromUrl(item.url) || item.url)}</div>
         <div class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asinFromUrl(item.url) || shortPath(item.url))}</a></div>
+        ${expiryTag}
         ${scanTag}
       </div>
       ${pillTag}

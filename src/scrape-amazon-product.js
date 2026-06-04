@@ -51,7 +51,9 @@ console.log("[amzinvite] product script loaded on", location.href);
   }
 
   function isUseful(item) {
-    return !!item?.name && (item.price !== null || item.stock_status !== null || item.image_url);
+    // stock_status est requis — sans lui l'item n'a pas de valeur pour le monitoring.
+    // On attend que le buybox soit chargé (potentiellement lazy) avant d'envoyer.
+    return !!item?.name && item.stock_status !== null;
   }
 
   function scrapeWhenReady() {

@@ -163,15 +163,32 @@
     const ppd = mainProductRoot();
     const txt = (ppd.textContent || "").toLowerCase();
 
-    if (
+    // Méthode 1 (primaire) : blocs HDP — Amazon inclut tous les états dans le HTML
+    // mais ne remplit qu'un seul. On cherche un bloc non-vide (>50 chars).
+    const HDP_INVITATION_IDS = [
+      "hdp_notRequested_desktop",  // invitation disponible, pas encore demandée
+      "hdp_requested_desktop",     // demande déjà envoyée
+      "hdp_invited_desktop",       // utilisateur sélectionné (peut acheter)
+      "hdp_expired_desktop",       // invitation expirée
+      "hdp_consumed_desktop",      // invitation déjà utilisée
+    ];
+    const hdpMatch = HDP_INVITATION_IDS.some((id) => {
+      const el = document.getElementById(id);
+      return el && el.textContent.trim().length > 50;
+    });
+
+    // Méthode 2 (fallback) : sélecteurs CSS legacy + mots-clés stricts dans le buybox
+    const cssMatch =
       document.querySelector("#requestInvitation") ||
       document.querySelector("#invitation_buybox") ||
       document.querySelector("[data-feature-name='requestInvitation']") ||
-      document.querySelector("input[name='submit.inviteButton']") ||
+      document.querySelector("input[name='submit.inviteButton']");
+    const txtMatch =
       txt.includes("disponible sur invitation") ||
       txt.includes("demander une invitation") ||
-      txt.includes("request an invitation")
-    ) {
+      txt.includes("request an invitation");
+
+    if (hdpMatch || cssMatch || txtMatch) {
       return { stock_status: "invitation", in_stock: false };
     }
 
@@ -181,16 +198,18 @@
       ppd;
     const buyboxTxt = (buybox?.textContent || "").toLowerCase();
 
+    // Signal fort : bouton add-to-cart actif → en stock (prioritaire sur le texte)
+    if (document.querySelector("#add-to-cart-button:not([disabled]), #buy-now-button:not([disabled])")) {
+      return { stock_status: "in_stock", in_stock: true };
+    }
+
     if (buyboxTxt.match(/en\s*pr[ée]commande|précommande|pre-?order|disponible\s*le|sortie\s*pr[ée]vue/)) {
       return { stock_status: "preorder", in_stock: true };
     }
     if (buyboxTxt.match(/temporairement\s*en\s*rupture|actuellement\s*indisponible|indisponible|en\s*rupture|out\s*of\s*stock/)) {
       return { stock_status: "out_of_stock", in_stock: false };
     }
-    if (
-      document.querySelector("#add-to-cart-button:not([disabled]), #buy-now-button:not([disabled])") ||
-      buyboxTxt.match(/en\s*stock|disponible|expédié|in\s*stock/)
-    ) {
+    if (buyboxTxt.match(/en\s*stock|disponible|expédié|in\s*stock/)) {
       return { stock_status: "in_stock", in_stock: true };
     }
     return { stock_status: null, in_stock: null };

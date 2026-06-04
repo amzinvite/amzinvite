@@ -282,6 +282,28 @@ function extractProductImageFromHtml(html) {
   return null;
 }
 
+function extractProductPriceFromHtml(html) {
+  if (!html) return null;
+  // Méthode principale : .a-offscreen dans les blocs prix buybox connus
+  // Amazon met le prix lisible en texte dans ce span caché ex: "55,99 €"
+  const priceBlockPatterns = [
+    /id="corePrice_desktop"[^]*?class="a-offscreen">([^<]+)</i,
+    /id="corePriceDisplay_desktop_feature_div"[^]*?class="a-offscreen">([^<]+)</i,
+    /id="corePrice_feature_div"[^]*?class="a-offscreen">([^<]+)</i,
+    /id="price_inside_buybox"[^>]*>([^<]+)</i,
+    /id="priceblock_ourprice"[^>]*>([^<]+)</i,
+  ];
+  for (const re of priceBlockPatterns) {
+    const m = html.match(re);
+    if (m?.[1]) {
+      const raw = m[1].replace(/\s/g, "").replace("€", "").replace(",", ".");
+      const val = parseFloat(raw);
+      if (!isNaN(val) && val > 0) return val;
+    }
+  }
+  return null;
+}
+
 async function storeKnownImage(url, html) {
   const asin = asinFromUrl(url);
   if (!asin) return;
@@ -378,8 +400,32 @@ async function sendFeedback(asin, state, source = "bg_check") {
 // ─────────────────────────────────────────────────────────────────────────
 // Scraping passif (opt-in) — délégué par les content scripts
 // ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// Historique de prix local — stocké dans chrome.storage.local uniquement
+// ─────────────────────────────────────────────────────────────────────────
+async function recordPrice(asin, price) {
+  if (!asin || price == null) return;
+  const { priceHistory } = await chrome.storage.local.get("priceHistory");
+  const history = priceHistory || {};
+  history[asin] = { price, ts: Date.now() };
+  await chrome.storage.local.set({ priceHistory: history });
+}
+
+async function getPrice(asin) {
+  if (!asin) return null;
+  const { priceHistory } = await chrome.storage.local.get("priceHistory");
+  return priceHistory?.[asin] ?? null;
+}
+
 async function forwardScrape(items) {
   const { communityDataEnabled } = await getSettings();
+
+  // Enregistrer les prix localement, indépendamment du partage anonyme
+  for (const it of items || []) {
+    const asin = ((it.external_id || it.asin || "")).toUpperCase();
+    if (asin && it.price != null) await recordPrice(asin, it.price);
+  }
+
   if (!communityDataEnabled || !items?.length) return { skipped: true };
   try {
     // Anonymisation : pas d'instanceId envoyé avec les observations scrape,
@@ -634,6 +680,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const html = await fetchAmazonPage(normalizedUrl);
         if (isStub(html)) return sendResponse({ ok: false, error: "stub" });
         storeKnownImage(normalizedUrl, html).catch(() => {});
+        const _asinSingle = asinFromUrl(normalizedUrl);
+        const _priceSingle = extractProductPriceFromHtml(html);
+        if (_asinSingle && _priceSingle != null) recordPrice(_asinSingle, _priceSingle).catch(() => {});
         const { text, doc, rawHtml } = extractBuyboxText(html);
         const state = detectInvitationState(text, doc, rawHtml);
         await setKnownState(normalizedUrl, state);
@@ -718,6 +767,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "get-watchlist") {
     getWatchlist().then((items) => sendResponse({ ok: true, items })).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "get-price") {
+    getPrice(msg.asin).then((entry) => sendResponse({ ok: true, entry })).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "reset-instance") {
@@ -845,6 +898,9 @@ async function runCheckOnce({ force = false } = {}) {
       }
 
       storeKnownImage(it.url, html).catch(() => {});
+      const asinKey = asinFromUrl(it.url);
+      const scrapedPrice = extractProductPriceFromHtml(html);
+      if (asinKey && scrapedPrice != null) recordPrice(asinKey, scrapedPrice).catch(() => {});
       const { text, doc, rawHtml } = extractBuyboxText(html);
       const state = detectInvitationState(text, doc, rawHtml);
       const asin = asinFromUrl(it.url);

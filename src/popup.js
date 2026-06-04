@@ -542,10 +542,12 @@ function renderList(items, showAll) {
       ? `<div class="expiry-text">⏱ ${escapeHTML(item.expiry_info.text)}</div>`
       : "";
 
+    const asin = asinFromUrl(item.url);
     li.innerHTML = `
       ${imgTag}
       <div class="body">
-        <div class="name" title="${escapeAttr(item.name || asinFromUrl(item.url) || item.url)}">${escapeHTML(item.name || asinFromUrl(item.url) || item.url)}</div>
+        <div class="name" title="${escapeAttr(item.name || asin || item.url)}">${escapeHTML(item.name || asin || item.url)}</div>
+        <span class="price-tag" data-asin="${escapeAttr(asin || "")}"></span>
         <div class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asinFromUrl(item.url) || shortPath(item.url))}</a></div>
         ${expiryTag}
         ${scanTag}
@@ -557,6 +559,16 @@ function renderList(items, showAll) {
     list.appendChild(li);
     rendered++;
   }
+
+  // Remplir les prix de façon asynchrone
+  list.querySelectorAll(".price-tag[data-asin]").forEach(async (el) => {
+    const asin = el.dataset.asin;
+    if (!asin) return;
+    const res = await sendMessage({ type: "get-price", asin });
+    if (res?.entry?.price != null) {
+      el.textContent = `${Number(res.entry.price).toFixed(2)} €`;
+    }
+  });
 
   list.querySelectorAll(".scan-single").forEach((btn) => {
     btn.addEventListener("click", async (e) => {

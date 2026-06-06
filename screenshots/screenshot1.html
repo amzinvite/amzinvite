@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="store.css" />
+  <style>
+    .canvas { width: 1280px; height: 800px; display: grid; grid-template-columns: 1fr 540px; align-items: center; }
+    .copy { padding: 0 40px 0 72px; }
+    .headline { font-size: 50px; }
+    .subline { font-size: 18px; max-width: 420px; }
+    .bullets { margin-top: 30px; }
+    .bullets li { font-size: 15px; }
+    .stage { display: flex; align-items: center; justify-content: center; height: 100%; }
+    .device { transform: scale(1.0); }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="copy">
+      <span class="kicker"><img src="icons/amzinvite-logo.svg" alt="" /> amzinvite</span>
+      <h2 class="headline">Sois alerté dès que tu es <span class="accent">sélectionné</span></h2>
+      <p class="subline">amzinvite surveille tes produits Amazon en mode invitation, en arrière-plan.</p>
+      <ul class="bullets">
+        <li><span class="ic">🔔</span> Alerte instantanée quand tu peux acheter</li>
+        <li><span class="ic">⏱</span> Temps restant avant expiration</li>
+        <li><span class="ic">🔒</span> 100 % local, zéro donnée perso</li>
+      </ul>
+    </div>
+
+    <div class="stage">
+      <div class="device">
+        <div class="shell">
+          <div class="panel">
+            <div class="hero">
+              <div class="hero-top">
+                <div class="brand">
+                  <img class="brand-mark" src="icons/amzinvite-logo.svg" alt="amzinvite" />
+                  <div>
+                    <h1>amzinvite</h1>
+                    <div class="meta">Version 0.1.8</div>
+                  </div>
+                </div>
+                <div class="eyebrow connected">● Connecté Amazon</div>
+              </div>
+            </div>
+
+            <div class="stats">
+              <div class="stat warn"><span class="n">2</span><span class="l">Achetables</span></div>
+              <div class="stat info"><span class="n">1</span><span class="l">À vérifier</span></div>
+              <div class="stat active"><span class="n">6</span><span class="l">Suivis</span></div>
+            </div>
+
+            <div class="status-wrap">
+              <div class="status-line">Prochain check auto dans 23:47</div>
+            </div>
+
+            <div class="actions">
+              <button class="primary">Vérifier maintenant</button>
+              <button class="ghost">⚙</button>
+            </div>
+
+            <div class="list-header"><h2 class="list-title">Produits suivis</h2></div>
+
+            <ul class="products">
+              <li class="product accepted-row">
+                <div class="product-thumb-wrap"><img class="product-thumb" src="img/B0GSSW2HQJ.jpg" alt="" /></div>
+                <div class="body">
+                  <div class="name">Tripack Méga-Évolution – Chaos Ascendant</div>
+                  <div class="link"><svg viewBox="0 0 12 12" fill="none"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>B0GSSW2HQJ</div>
+                  <div class="expiry-text">⏱ 26 heures 34 minutes</div>
+                </div>
+                <a class="pill accepted" href="#">Sélectionné</a>
+                <button class="scan-btn"><svg viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 7 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M7 1.5h3.5V5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              </li>
+              <li class="product accepted-row">
+                <div class="product-thumb-wrap"><img class="product-thumb" src="img/B0G3YH3QN4.jpg" alt="" /></div>
+                <div class="body">
+                  <div class="name">Coffret Dresseur d'Élite de Héros Transcendants</div>
+                  <div class="link"><svg viewBox="0 0 12 12" fill="none"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>B0G3YH3QN4</div>
+                  <div class="expiry-text">⏱ 41 heures 12 minutes</div>
+                </div>
+                <a class="pill accepted" href="#">Sélectionné</a>
+                <button class="scan-btn"><svg viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 7 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M7 1.5h3.5V5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              </li>
+              <li class="product">
+                <div class="product-thumb-wrap"><img class="product-thumb" src="img/B0GF91X2RG.jpg" alt="" /></div>
+                <div class="body">
+                  <div class="name">Boîte Méga-Dracaufeu X-ex</div>
+                  <div class="link"><svg viewBox="0 0 12 12" fill="none"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>B0GF91X2RG</div>
+                </div>
+                <span class="pill available">Dispo à demander</span>
+                <button class="scan-btn"><svg viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 7 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M7 1.5h3.5V5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              </li>
+            </ul>
+
+            <div class="footer-actions">
+              <a href="#">Privacy</a>
+              <a href="#">GitHub</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

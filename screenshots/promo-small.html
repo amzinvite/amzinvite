@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="store.css" />
+  <style>
+    .canvas {
+      width: 440px; height: 280px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 0 28px;
+    }
+    .logo { width: 76px; height: 76px; border-radius: 22px; box-shadow: 0 14px 30px rgba(80,30,18,0.22); }
+    .name { margin-top: 18px; font-size: 32px; font-weight: 850; letter-spacing: -0.02em; color: var(--text); }
+    .tag { margin-top: 8px; font-size: 15px; font-weight: 600; color: var(--text-soft); line-height: 1.4; max-width: 320px; }
+    .chip {
+      margin-top: 16px; display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 999px; background: var(--green); color: #fff;
+      font-weight: 800; font-size: 12.5px; font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <img class="logo" src="icons/amzinvite-logo.svg" alt="amzinvite" />
+    <div class="name">amzinvite</div>
+    <div class="tag">Alertes pour les invitations Amazon Pokémon</div>
+    <div class="chip">⏱ Sélectionné — 26 h 34 min restantes</div>
+  </div>
+</body>
+</html>

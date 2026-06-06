@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="store.css" />
+  <style>
+    .canvas { width: 1280px; height: 800px; display: grid; grid-template-columns: 540px 1fr; align-items: center; }
+    .stage { display: flex; align-items: center; justify-content: center; height: 100%; }
+    .device { transform: scale(1.0); }
+    .copy { padding: 0 80px 0 24px; }
+    .headline { font-size: 46px; }
+    .subline { font-size: 18px; max-width: 440px; }
+    .bullets { margin-top: 28px; }
+    .bullets li { font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="stage">
+      <div class="device">
+        <div class="shell">
+          <div class="panel">
+            <div class="hero">
+              <div class="hero-top">
+                <div class="brand">
+                  <img class="brand-mark" src="icons/amzinvite-logo.svg" alt="amzinvite" />
+                  <div><h1>amzinvite</h1><div class="meta">Version 0.1.8</div></div>
+                </div>
+                <div class="eyebrow connected">● Connecté Amazon</div>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="primary">Vérifier maintenant</button>
+              <button class="ghost">⚙</button>
+            </div>
+
+            <div class="section">
+              <div class="stack">
+                <div class="card">
+                  <div class="inline-field">
+                    <div>
+                      <label class="field">Intervalle auto</label>
+                      <p class="card-copy">Toutes les combien de minutes on refait un check.</p>
+                    </div>
+                    <input type="number" value="30" />
+                  </div>
+                </div>
+
+                <label class="toggle-row">
+                  <input type="checkbox" checked />
+                  <span>
+                    <b>Aider amzinvite avec des données anonymes</b>
+                    <span class="hint">Partage anonymement les invitations détectées pour améliorer le feed et le catalogue.</span>
+                  </span>
+                </label>
+
+                <label class="toggle-row">
+                  <input type="checkbox" checked />
+                  <span>
+                    <b>Suivre automatiquement POKÉMON TCG FR</b>
+                    <span class="hint">Charge le suivi des produits Pokémon TCG FR du feed public.</span>
+                  </span>
+                </label>
+
+                <label class="toggle-row">
+                  <input type="checkbox" />
+                  <span>
+                    <b>Auto-demander les invitations</b>
+                    <span class="hint">L'extension envoie la demande automatiquement quand un produit s'ouvre.</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div class="footer-actions"><a href="#">Privacy</a><a href="#">GitHub</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="copy">
+      <span class="kicker"><img src="icons/amzinvite-logo.svg" alt="" /> amzinvite</span>
+      <h2 class="headline">Règle-le <span class="accent">une fois</span>, oublie-le</h2>
+      <p class="subline">Choisis ta fréquence de vérification et laisse amzinvite suivre le feed Pokémon TCG FR automatiquement.</p>
+      <ul class="bullets">
+        <li><span class="ic">⏲️</span> Check automatique programmé</li>
+        <li><span class="ic">🎴</span> Feed Pokémon TCG FR intégré</li>
+        <li><span class="ic">🤖</span> Auto-demande en option</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

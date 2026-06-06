@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="store.css" />
+  <style>
+    .canvas { width: 1280px; height: 800px; display: grid; grid-template-columns: 560px 1fr; align-items: center; }
+    .stage { display: flex; align-items: center; justify-content: center; height: 100%; }
+    .device { transform: scale(0.96); }
+    .copy { padding: 0 80px 0 40px; }
+    .headline { font-size: 46px; }
+    .subline { font-size: 18px; max-width: 460px; }
+    .badge-new {
+      display: inline-block; margin-bottom: 14px; padding: 6px 13px; border-radius: 999px;
+      background: var(--green); color: #fff; font-weight: 800; font-size: 12.5px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .zoom-callout {
+      position: relative; margin-top: 30px; width: 340px;
+      background: #fff; border-radius: 18px; padding: 18px 20px;
+      box-shadow: 0 24px 50px rgba(80,30,18,0.18); border: 1px solid var(--border);
+    }
+    .zoom-callout .big-chip {
+      display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px;
+      border-radius: 12px; background: var(--green-bg); color: var(--green);
+      font-weight: 800; font-size: 19px; font-variant-numeric: tabular-nums;
+    }
+    .zoom-callout .lbl { margin-top: 12px; color: var(--text-soft); font-size: 13.5px; line-height: 1.45; font-weight: 600; }
+    .zoom-callout::after {
+      content: ""; position: absolute; left: -13px; top: 38px;
+      border-width: 8px 14px 8px 0; border-style: solid;
+      border-color: transparent #fff transparent transparent;
+      filter: drop-shadow(-3px 0 2px rgba(80,30,18,0.05));
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="stage">
+      <div class="device">
+        <div class="shell">
+          <div class="panel">
+            <div class="hero">
+              <div class="hero-top">
+                <div class="brand">
+                  <img class="brand-mark" src="icons/amzinvite-logo.svg" alt="amzinvite" />
+                  <div><h1>amzinvite</h1><div class="meta">Version 0.1.8</div></div>
+                </div>
+                <div class="eyebrow connected">● Connecté Amazon</div>
+              </div>
+            </div>
+
+            <div class="stats">
+              <div class="stat warn"><span class="n">2</span><span class="l">Achetables</span></div>
+              <div class="stat info"><span class="n">1</span><span class="l">À vérifier</span></div>
+              <div class="stat active"><span class="n">6</span><span class="l">Suivis</span></div>
+            </div>
+
+            <div class="list-header"><h2 class="list-title">Produits suivis</h2></div>
+
+            <ul class="products">
+              <li class="product accepted-row">
+                <div class="product-thumb-wrap"><img class="product-thumb" src="img/B0GSSW2HQJ.jpg" alt="" /></div>
+                <div class="body">
+                  <div class="name">Tripack Méga-Évolution – Chaos Ascendant</div>
+                  <div class="link"><svg viewBox="0 0 12 12" fill="none"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>B0GSSW2HQJ</div>
+                  <div class="expiry-text">⏱ 26 heures 34 minutes</div>
+                </div>
+                <a class="pill accepted" href="#">Sélectionné</a>
+              </li>
+              <li class="product accepted-row">
+                <div class="product-thumb-wrap"><img class="product-thumb" src="img/B0G3YH3QN4.jpg" alt="" /></div>
+                <div class="body">
+                  <div class="name">Coffret Dresseur d'Élite de Héros Transcendants</div>
+                  <div class="link"><svg viewBox="0 0 12 12" fill="none"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>B0G3YH3QN4</div>
+                  <div class="expiry-text">⏱ 41 heures 12 minutes</div>
+                </div>
+                <a class="pill accepted" href="#">Sélectionné</a>
+              </li>
+              <li class="product">
+                <div class="product-thumb-wrap"><img class="product-thumb" src="img/B0GF91X2RG.jpg" alt="" /></div>
+                <div class="body">
+                  <div class="name">Boîte Méga-Dracaufeu X-ex</div>
+                  <div class="link"><svg viewBox="0 0 12 12" fill="none"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>B0GF91X2RG</div>
+                </div>
+                <span class="pill available">Dispo à demander</span>
+              </li>
+            </ul>
+
+            <div class="footer-actions"><a href="#">Privacy</a><a href="#">GitHub</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="copy">
+      <span class="badge-new">Nouveau · v0.1.8</span>
+      <h2 class="headline">Combien de temps <span class="accent">te reste-t-il ?</span></h2>
+      <p class="subline">Une invitation acceptée expire en quelques heures. amzinvite affiche le compte à rebours pour ne pas la laisser filer.</p>
+      <div class="zoom-callout">
+        <span class="big-chip">⏱ 26 heures 34 minutes</span>
+        <div class="lbl">Le temps restant exact, lu sur Amazon et actualisé à chaque vérification.</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

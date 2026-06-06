@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="store.css" />
+  <style>
+    .canvas { width: 1280px; height: 800px; display: grid; grid-template-columns: 1fr 560px; align-items: center; }
+    .copy { padding: 0 30px 0 80px; }
+    .headline { font-size: 46px; }
+    .subline { font-size: 18px; max-width: 430px; }
+    .bullets { margin-top: 28px; }
+    .bullets li { font-size: 15px; }
+    .stage { display: flex; align-items: center; justify-content: center; height: 100%; padding-right: 70px; }
+
+    /* ── Maquette buybox Amazon ── */
+    .amz {
+      width: 360px; background: #fff; border: 1px solid #d5d9d9; border-radius: 12px;
+      padding: 18px 20px 20px; font-family: "Amazon Ember", Arial, sans-serif;
+      color: #0f1111; box-shadow: 0 30px 64px rgba(40,30,20,0.26);
+    }
+    .amz .price { font-size: 30px; font-weight: 500; letter-spacing: -0.5px; }
+    .amz .price sup { font-size: 15px; top: -0.7em; }
+    .amz .price .cur { font-size: 15px; vertical-align: super; margin-left: 2px; }
+    .amz .prime { margin-top: 8px; font-size: 15px; }
+    .amz .prime b { color: #0f1111; }
+    .amz .prime .p { color: #1399FF; font-weight: 700; }
+    .amz .prime .check { color: #f08804; font-weight: 700; }
+    .amz .returns { margin-top: 4px; color: #007185; font-size: 14px; }
+    .amz .deliv { margin-top: 14px; font-size: 14px; line-height: 1.45; }
+    .amz .deliv a { color: #007185; text-decoration: none; }
+    .amz .avail { margin-top: 14px; color: #007600; font-size: 18px; font-weight: 700; }
+    .amz .invite { margin-top: 12px; font-size: 14px; line-height: 1.5; }
+    .amz .invite .t { color: #007600; font-weight: 700; }
+    .amz .cart {
+      margin-top: 16px; width: 100%; height: 44px; border: 1px solid #fcd200;
+      border-radius: 22px; background: #ffd814; color: #0f1111; font-size: 15px;
+      font-family: inherit; cursor: pointer;
+    }
+    .amz .meta-table { margin-top: 16px; font-size: 13px; line-height: 1.5; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+    .amz .meta-table .k { color: #565959; }
+    .amz .meta-table .v { color: #007185; }
+
+    /* ── Widget amzinvite injecté (repris de content.js, état accepted) ── */
+    .amz-widget {
+      margin-top: 14px; padding: 12px 14px; border-radius: 14px;
+      background: linear-gradient(135deg,#059669,#047857);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      color: #fff;
+    }
+    .amz-widget .row { display: flex; align-items: center; gap: 10px; }
+    .amz-widget .ic { font-size: 20px; flex-shrink: 0; }
+    .amz-widget .ttl { font-weight: 700; font-size: 13.5px; }
+    .amz-widget .sub { font-size: 11px; opacity: 0.9; margin-top: 1px; }
+    .amz-widget .btn {
+      border: 1.5px solid rgba(255,255,255,0.4); border-radius: 8px;
+      background: rgba(255,255,255,0.2); color: #fff; font: 700 12px system-ui;
+      padding: 6px 12px; white-space: nowrap; flex-shrink: 0;
+    }
+    .tag-injected {
+      position: relative; margin-top: -2px;
+    }
+    .tag-injected .pin {
+      position: absolute; right: -10px; top: -12px; z-index: 2;
+      background: var(--brand); color: #fff; font: 800 10px system-ui;
+      padding: 4px 9px; border-radius: 999px; letter-spacing: 0.04em;
+      box-shadow: 0 6px 14px rgba(80,30,18,0.25); white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="copy">
+      <span class="kicker"><img src="icons/amzinvite-logo.svg" alt="" /> amzinvite</span>
+      <h2 class="headline">Directement sur la <span class="accent">page Amazon</span></h2>
+      <p class="subline">Un widget s'ajoute dans la fiche produit pour suivre l'article ou le scanner sans ouvrir l'extension.</p>
+      <ul class="bullets">
+        <li><span class="ic">🎯</span> Détecte l'état d'invitation en direct</li>
+        <li><span class="ic">➕</span> Suivi en un clic</li>
+        <li><span class="ic">🎉</span> T'indique quand tu es sélectionné</li>
+      </ul>
+    </div>
+
+    <div class="stage">
+      <div class="amz">
+        <div class="price">17<sup>99</sup><span class="cur">€</span></div>
+        <div class="prime"><span class="check">✓</span><span class="p">prime</span> <b>Demain</b></div>
+        <div class="returns">Retours GRATUITS ⌄</div>
+        <div class="deliv">Livraison <b>GRATUITE demain 1 juin</b> à <a href="#">Rueil-malmaison 92500</a>. <a href="#">Détails</a></div>
+        <div class="avail">Disponible pour vous à l'achat</div>
+        <div class="invite">Dépêchez-vous, c'est une offre très demandée. Vous avez <span class="t">26 heures 34 minutes</span> avant l'expiration de votre invitation.</div>
+        <button class="cart">Ajouter au panier</button>
+        <div class="meta-table">
+          <span class="k">Expéditeur / Vendeur</span><span class="v">Amazon</span>
+          <span class="k">Retours</span><span class="v">Retours de 30 jours</span>
+          <span class="k">Paiement</span><span class="v">Transaction sécurisée</span>
+        </div>
+
+        <div class="tag-injected">
+          <span class="pin">↑ ajouté par amzinvite</span>
+          <div class="amz-widget">
+            <div class="row">
+              <span class="ic">🎉</span>
+              <div style="flex:1;min-width:0">
+                <div class="ttl">amzinvite · Sélectionné — 72h !</div>
+                <div class="sub">✓ Suivi · 26 h 34 min restantes</div>
+              </div>
+              <span class="btn">Scan</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -50,15 +50,10 @@ console.log("[amzinvite] product script loaded on", location.href);
     });
   }
 
-  // Filtre non-TCG identique à scrape-amazon-listing.js
-  const NON_TCG_RE = /\b(peluches?|figurines?|battle\s*figure|action\s*figure|select\s*figure|feature\s*figure|toupies?|clip\s*[''ʼ']?\s*n\s*[''ʼ']?\s*go|parure|drap[\s-]?housse|couverture\s*polaire|coussins?|t[-\s]?shirts?|chemises?|chaussettes|crayons?|trousses?|papeterie|cahiers?|porte[-\s]?stylo|classeurs?|sac\s*à\s*dos|costumes?|disguise|dress|serviettes?|laisse|lanceur\s*de\s*balle|pkw\s?\d+|pok[ée]mon\s*toys?|jouets?|bo[îi]tes?\s*de\s*rangement|malette)\b/i;
-
   function isUseful(item) {
     // stock_status est requis — sans lui l'item n'a pas de valeur pour le monitoring.
     // On attend que le buybox soit chargé (potentiellement lazy) avant d'envoyer.
-    if (!item?.name || item.stock_status === null) return false;
-    if (NON_TCG_RE.test(item.name)) return false;
-    return true;
+    return !!item?.name && item.stock_status !== null;
   }
 
   function scrapeWhenReady() {

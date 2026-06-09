@@ -35,7 +35,10 @@
   }
 
   function extractName() {
-    const el = document.querySelector("#productTitle, #title");
+    const el =
+      document.querySelector("#productTitle") ||
+      document.querySelector("#title #productTitle") ||
+      document.querySelector("#title > span");
     return el?.textContent?.trim() || null;
   }
 

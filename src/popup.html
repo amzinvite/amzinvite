@@ -433,6 +433,33 @@
       li.product:last-child {
         margin-bottom: 0;
       }
+      /* Vue compacte : liste plus dense */
+      ul.products.compact li.product {
+        padding: 7px 10px;
+        gap: 8px;
+        border-radius: 12px;
+        margin-bottom: 5px;
+      }
+      ul.products.compact .product-thumb-wrap {
+        width: 34px;
+        height: 34px;
+        border-radius: 6px;
+      }
+      ul.products.compact .product-thumb {
+        width: 30px;
+        height: 30px;
+      }
+      ul.products.compact .name {
+        font-size: 12px;
+      }
+      ul.products.compact .link,
+      ul.products.compact .price-tag {
+        font-size: 10px;
+      }
+      ul.products.compact .pill {
+        padding: 5px 8px;
+        font-size: 9.5px;
+      }
       li.product.scanning {
         border-color: color-mix(in srgb, var(--blue, #3b82f6) 50%, var(--border));
         background: color-mix(in srgb, var(--blue, #3b82f6) 8%, var(--surface-strong));
@@ -793,6 +820,14 @@
               </div>
 
               <label class="toggle-row">
+                <input id="compactMode" type="checkbox" />
+                <span>
+                  <b>Vue compacte</b>
+                  <span class="hint">Affiche la liste en plus dense : miniatures et marges réduites pour voir plus de produits d'un coup.</span>
+                </span>
+              </label>
+
+              <label class="toggle-row">
                 <input id="communityDataEnabled" type="checkbox" />
                 <span>
                   <b>Aider amzinvite avec des données anonymes</b>
@@ -804,7 +839,7 @@
                 <input id="trackPokemonTcgFr" type="checkbox" />
                 <span>
                   <b>Suivre automatiquement POKÉMON TCG FR</b>
-                  <span class="hint">Désactivé par défaut. Active cette option pour suivre automatiquement les produits Pokémon TCG FR du feed public.</span>
+                  <span class="hint">Activé par défaut. Suit automatiquement les produits Pokémon TCG FR du feed public ; décocher retire tous les produits du feed.</span>
                 </span>
               </label>
               <div id="pokemonFeedDate" class="feed-date" hidden></div>

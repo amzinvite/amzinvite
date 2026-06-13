@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.15] — vue compacte
+
+### Features
+- Toggle « Vue compacte » dans les réglages : liste plus dense (miniatures, marges et polices réduites) pour voir plus de produits d'un coup. Préférence mémorisée localement
+
+### Changes
+- Correction du libellé du réglage POKÉMON TCG FR (indiquait encore « désactivé par défaut »)
+
 ## [0.1.14] — feed public protégé (requête signée)
 
 ### Changes

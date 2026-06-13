@@ -158,6 +158,10 @@ function setupImagePreview() {
   });
 }
 
+function applyCompactMode(enabled) {
+  $("list").classList.toggle("compact", !!enabled);
+}
+
 async function persistSettings({ reschedule = false } = {}) {
   await chrome.storage.local.set({
     intervalMin: Math.max(5, parseInt($("intervalMin").value || "30", 10)),
@@ -165,6 +169,7 @@ async function persistSettings({ reschedule = false } = {}) {
     communityDataEnabled: $("communityDataEnabled").checked,
     trackPokemonTcgFr: $("trackPokemonTcgFr").checked,
     soundEnabled: $("soundEnabled").checked,
+    compactMode: $("compactMode").checked,
   });
   await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   if (reschedule) {
@@ -181,6 +186,7 @@ async function load() {
     "communityDataEnabled",
     "trackPokemonTcgFr",
     "soundEnabled",
+    "compactMode",
     "telemetryEnabled",
     "scrapeEnabled",
     "lastRun",
@@ -197,6 +203,8 @@ async function load() {
   );
   setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr == null ? true : cfg.trackPokemonTcgFr);
   setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
+  setChecked("compactMode", !!cfg.compactMode);
+  applyCompactMode(!!cfg.compactMode);
   renderAutoRequestNote();
   await renderPokemonFeedDate();
   renderAmazonStatus();
@@ -702,6 +710,11 @@ $("addUrl").addEventListener("keydown", (e) => {
 });
 
 $("soundEnabled").addEventListener("change", async () => {
+  await persistSettings();
+});
+
+$("compactMode").addEventListener("change", async () => {
+  applyCompactMode($("compactMode").checked);
   await persistSettings();
 });
 

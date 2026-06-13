@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.14] — feed public protégé (requête signée)
+
+### Changes
+- Les requêtes vers le feed public sont désormais signées HMAC (`X-Instance-Id`/`X-Ts`/`X-Sig` sur le path), même schéma que le feedback. Empêche le scraping anonyme trivial de la liste curée (le secret reste extractible côté navigateur, c'est une protection contre la copie facile, pas absolue)
+
 ## [0.1.13] — effets visuels + Pokémon TCG FR par défaut
 
 ### Changes

@@ -21,6 +21,7 @@ import { detectInvitationState, extractBuyboxText } from "./detector.js";
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────
 const API_BASE = "https://amzinvite-api.amzinvite.workers.dev";
+const FEED_SIG_PAYLOAD = "/api/public/invitations"; // doit matcher le backend
 const HMAC_SECRET = "0b950ea0a74ecd36f73218b7aef389bfe610e6053fe85371ddf4f351ff2ce89a";
 const ALARM_NAME = "invitation-check";
 const DEFAULT_INTERVAL_MIN = 30;
@@ -97,8 +98,18 @@ async function hmacSign(payload, timestamp) {
 // ─────────────────────────────────────────────────────────────────────────
 async function refreshPublicFeed() {
   const timeout = withTimeout();
+  // Requête signée HMAC (même schéma que le feedback) : la signature porte
+  // sur le path, pour éviter que l'URL du feed ne soit scrapable au curl.
+  const instanceId = await getInstanceId();
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const sig = await hmacSign(FEED_SIG_PAYLOAD, ts);
   const r = await fetch(`${API_BASE}/api/public/invitations`, {
     signal: timeout.signal,
+    headers: {
+      "X-Instance-Id": instanceId,
+      "X-Ts": ts,
+      "X-Sig": sig,
+    },
   }).finally(timeout.done);
   if (!r.ok) throw new Error(`feed HTTP ${r.status}`);
   const items = await r.json();

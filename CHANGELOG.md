@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.16] — sélecteur de mode d'affichage
+
+### Changes
+- Le choix vue confortable / vue liste compacte passe dans un sélecteur d'icônes directement au-dessus de la liste (plus besoin d'ouvrir les réglages)
+- Retrait du toggle « Vue compacte » du menu réglages (remplacé par le sélecteur)
+
 ## [0.1.15] — vue compacte
 
 ### Features

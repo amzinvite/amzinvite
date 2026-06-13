@@ -158,8 +158,17 @@ function setupImagePreview() {
   });
 }
 
-function applyCompactMode(enabled) {
-  $("list").classList.toggle("compact", !!enabled);
+function setViewMode(compact) {
+  $("list").classList.toggle("compact", !!compact);
+  $("view-compact").classList.toggle("active", !!compact);
+  $("view-comfort").classList.toggle("active", !compact);
+  $("view-compact").setAttribute("aria-pressed", String(!!compact));
+  $("view-comfort").setAttribute("aria-pressed", String(!compact));
+}
+
+async function applyViewMode(compact) {
+  setViewMode(compact);
+  await chrome.storage.local.set({ compactMode: !!compact });
 }
 
 async function persistSettings({ reschedule = false } = {}) {
@@ -169,7 +178,6 @@ async function persistSettings({ reschedule = false } = {}) {
     communityDataEnabled: $("communityDataEnabled").checked,
     trackPokemonTcgFr: $("trackPokemonTcgFr").checked,
     soundEnabled: $("soundEnabled").checked,
-    compactMode: $("compactMode").checked,
   });
   await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   if (reschedule) {
@@ -203,8 +211,7 @@ async function load() {
   );
   setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr == null ? true : cfg.trackPokemonTcgFr);
   setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
-  setChecked("compactMode", !!cfg.compactMode);
-  applyCompactMode(!!cfg.compactMode);
+  setViewMode(!!cfg.compactMode);
   renderAutoRequestNote();
   await renderPokemonFeedDate();
   renderAmazonStatus();
@@ -713,10 +720,8 @@ $("soundEnabled").addEventListener("change", async () => {
   await persistSettings();
 });
 
-$("compactMode").addEventListener("change", async () => {
-  applyCompactMode($("compactMode").checked);
-  await persistSettings();
-});
+$("view-comfort").addEventListener("click", () => { void applyViewMode(false); });
+$("view-compact").addEventListener("click", () => { void applyViewMode(true); });
 
 $("export").addEventListener("click", async () => {
   setError("");

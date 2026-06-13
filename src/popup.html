@@ -409,6 +409,40 @@
         font-weight: 600;
         padding: 0;
       }
+      .view-toggle {
+        display: inline-flex;
+        margin-left: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .view-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 26px;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        color: var(--text-soft);
+      }
+      .view-btn + .view-btn {
+        border-left: 1px solid var(--border);
+      }
+      .view-btn svg {
+        width: 15px;
+        height: 15px;
+      }
+      .view-btn:hover {
+        color: var(--brand);
+        transform: none;
+      }
+      .view-btn.active {
+        background: var(--brand-soft);
+        color: var(--brand);
+      }
       .text-button:hover {
         color: var(--brand);
         transform: none;
@@ -820,14 +854,6 @@
               </div>
 
               <label class="toggle-row">
-                <input id="compactMode" type="checkbox" />
-                <span>
-                  <b>Vue compacte</b>
-                  <span class="hint">Affiche la liste en plus dense : miniatures et marges réduites pour voir plus de produits d'un coup.</span>
-                </span>
-              </label>
-
-              <label class="toggle-row">
                 <input id="communityDataEnabled" type="checkbox" />
                 <span>
                   <b>Aider amzinvite avec des données anonymes</b>
@@ -885,6 +911,14 @@
 
         <div class="list-header">
           <button class="text-button" id="toggle-hidden" type="button" hidden>Afficher tout</button>
+          <div class="view-toggle" role="group" aria-label="Mode d'affichage">
+            <button id="view-comfort" class="view-btn" type="button" title="Vue confortable" aria-label="Vue confortable" aria-pressed="true">
+              <svg viewBox="0 0 16 16" fill="none"><rect x="2.2" y="2.8" width="11.6" height="4.4" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="8.8" width="11.6" height="4.4" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+            </button>
+            <button id="view-compact" class="view-btn" type="button" title="Vue liste compacte" aria-label="Vue liste compacte" aria-pressed="false">
+              <svg viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
         </div>
         <ul class="products" id="list"></ul>
         <div class="empty" id="empty"></div>

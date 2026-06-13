@@ -483,9 +483,53 @@
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
-      li.product:has(.pill.accepted) {
-        border-color: color-mix(in srgb, var(--green) 35%, var(--border));
-        background: linear-gradient(90deg, color-mix(in srgb, var(--green-bg) 75%, transparent), transparent);
+      /* Produit sélectionné : bordure verte, halo pulsé et reflet qui balaie */
+      li.product.accepted {
+        border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+        background: linear-gradient(90deg, color-mix(in srgb, var(--green-bg) 85%, transparent), transparent);
+        position: relative;
+        overflow: hidden;
+        animation: accepted-glow 2.2s ease-in-out infinite;
+      }
+      li.product.accepted::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -60%;
+        width: 45%;
+        height: 100%;
+        background: linear-gradient(110deg, transparent, color-mix(in srgb, var(--green) 16%, transparent), transparent);
+        transform: skewX(-18deg);
+        animation: shine-sweep 3.6s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .pill.accepted { animation: pill-pop 2.2s ease-in-out infinite; }
+      /* Invitation dispo : accent ambré qui respire pour attirer l'oeil */
+      li.product.available {
+        border-color: color-mix(in srgb, var(--amber) 38%, var(--border));
+      }
+      .pill.available { animation: avail-pulse 1.9s ease-in-out infinite; }
+      @keyframes accepted-glow {
+        0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 32%, transparent); }
+        50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 0%, transparent); }
+      }
+      @keyframes shine-sweep {
+        0% { left: -60%; }
+        55%, 100% { left: 130%; }
+      }
+      @keyframes pill-pop {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.07); }
+      }
+      @keyframes avail-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber) 38%, transparent); }
+        50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 0%, transparent); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        li.product.accepted,
+        li.product.accepted::after,
+        .pill.accepted,
+        .pill.available { animation: none !important; }
       }
       .product-thumb-wrap {
         width: 52px;

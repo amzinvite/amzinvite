@@ -61,7 +61,7 @@ async function getSettings() {
     intervalMin: cfg.intervalMin || DEFAULT_INTERVAL_MIN,
     autoRequest: !!cfg.autoRequest,
     communityDataEnabled,
-    trackPokemonTcgFr: !!cfg.trackPokemonTcgFr,
+    trackPokemonTcgFr: cfg.trackPokemonTcgFr == null ? true : !!cfg.trackPokemonTcgFr,
     soundEnabled: cfg.soundEnabled == null ? true : !!cfg.soundEnabled,
   };
 }
@@ -646,9 +646,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (existing.communityDataEnabled == null) {
     defaults.communityDataEnabled = existing.scrapeEnabled !== false || !!existing.telemetryEnabled;
   }
-  if (existing.trackPokemonTcgFr == null) defaults.trackPokemonTcgFr = false;
+  if (existing.trackPokemonTcgFr == null) defaults.trackPokemonTcgFr = true;
   if (existing.showAll == null) defaults.showAll = false;
   if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
+  // Premier install avec suivi Pokémon activé : pré-remplit le feed public.
+  if (defaults.trackPokemonTcgFr === true) {
+    refreshPublicFeed().catch((e) => console.warn("[amzinvite] feed initial refresh failed:", e));
+  }
   if (existing.telemetryEnabled != null || existing.scrapeEnabled != null) {
     await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   }

@@ -33,12 +33,11 @@ Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent p
 
 ## Suivi automatique
 
-Par défaut, amzinvite ne suit aucun produit automatiquement. Tu peux :
+Par défaut, amzinvite suit automatiquement les produits POKÉMON TCG FR via le feed public. Tu peux :
 
-1. ajouter des liens Amazon manuellement
-2. activer le suivi automatique POKÉMON TCG FR
-3. charger le feed public correspondant quand cette option est activée
-4. laisser le scraping fonctionner sans check automatique si aucun suivi n'est actif
+1. désactiver ce suivi automatique à tout moment (ce qui vide la liste des produits du feed)
+2. ajouter des liens Amazon manuellement (conservés même si le feed est désactivé)
+3. laisser le scraping fonctionner sans check automatique si aucun suivi n'est actif
 
 ## Données envoyées à Amazon
 

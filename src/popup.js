@@ -195,7 +195,7 @@ async function load() {
     "communityDataEnabled",
     cfg.communityDataEnabled == null ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled) : cfg.communityDataEnabled,
   );
-  setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr);
+  setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr == null ? true : cfg.trackPokemonTcgFr);
   setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
   renderAutoRequestNote();
   await renderPokemonFeedDate();
@@ -514,6 +514,7 @@ function renderList(items, showAll) {
     const isSingleScanning = singleScanUrl === item.url;
     const li = document.createElement("li");
     li.className = isScanning ? "product scanning" : "product";
+    if (state === "accepted" || state === "available") li.classList.add(state);
     if (isSingleScanning) li.dataset.scanning = "1";
 
     const pillTag = state === "accepted"

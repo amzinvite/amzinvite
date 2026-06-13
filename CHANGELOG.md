@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.13] — effets visuels + Pokémon TCG FR par défaut
+
+### Changes
+- Suivi automatique POKÉMON TCG FR **activé par défaut** (feed pré-chargé au premier install). Le décocher vide la liste des produits du feed ; les liens ajoutés manuellement sont conservés
+- Effets visuels sur la liste : produit « sélectionné » avec halo vert pulsé + reflet qui balaie + pastille animée, invitation « dispo » avec accent ambré qui respire (respecte `prefers-reduced-motion`)
+- Docs (README, PRIVACY, onboarding) mises à jour pour refléter le suivi par défaut
+
+### Tests
+- Ajout d'une suite de tests Node (`test/background.test.mjs`) couvrant export/import, dédoublonnage par ASIN, application des réglages et défauts
+
 ## [0.1.12] — son d'alerte + export/import
 
 ### Features

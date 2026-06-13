@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.20] — onboarding : précision « Chrome ouvert »
+
+### Changes
+- Onboarding plus honnête : l'auto-demande ne tourne que tant que Chrome reste ouvert (ordi allumé). Texte du hero et conditions requises ajustés (« garde Chrome ouvert + connecte-toi à Amazon »)
+
 ## [0.1.19] — barre d'actions sur une seule ligne
 
 ### Fixes

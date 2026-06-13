@@ -158,12 +158,19 @@ function setupImagePreview() {
   });
 }
 
+const VIEW_ICON_COMPACT = `<svg viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+const VIEW_ICON_COMFORT = `<svg viewBox="0 0 16 16" fill="none"><rect x="2.2" y="2.8" width="11.6" height="4.4" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="8.8" width="11.6" height="4.4" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>`;
+
+let compactView = false;
 function setViewMode(compact) {
-  $("list").classList.toggle("compact", !!compact);
-  $("view-compact").classList.toggle("active", !!compact);
-  $("view-comfort").classList.toggle("active", !compact);
-  $("view-compact").setAttribute("aria-pressed", String(!!compact));
-  $("view-comfort").setAttribute("aria-pressed", String(!compact));
+  compactView = !!compact;
+  $("list").classList.toggle("compact", compactView);
+  const btn = $("toggle-view");
+  btn.classList.toggle("active", compactView);
+  btn.setAttribute("aria-pressed", String(compactView));
+  // L'icône montre la vue vers laquelle on bascule.
+  btn.innerHTML = compactView ? VIEW_ICON_COMFORT : VIEW_ICON_COMPACT;
+  btn.title = compactView ? "Vue confortable" : "Vue liste compacte";
 }
 
 async function applyViewMode(compact) {
@@ -720,8 +727,7 @@ $("soundEnabled").addEventListener("change", async () => {
   await persistSettings();
 });
 
-$("view-comfort").addEventListener("click", () => { void applyViewMode(false); });
-$("view-compact").addEventListener("click", () => { void applyViewMode(true); });
+$("toggle-view").addEventListener("click", () => { void applyViewMode(!compactView); });
 
 $("export").addEventListener("click", async () => {
   setError("");

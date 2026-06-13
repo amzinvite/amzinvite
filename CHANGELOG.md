@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.17] — bascule de vue compacte (bouton unique)
+
+### Changes
+- La bascule de vue devient un bouton-switch unique placé entre « Vérifier maintenant » et ⚙ (gain de place) ; l'icône change selon le mode (lignes → compacter, cartes → agrandir) et le bouton se surligne en vue compacte
+
 ## [0.1.16] — sélecteur de mode d'affichage
 
 ### Changes

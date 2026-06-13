@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "amzinvite — Invitations Amazon Pokémon TCG",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Ne ratez plus les ETB et coffrets Pokémon TCG disponibles sur invitation Amazon : surveillance auto, alertes et demande en un clic.",
   "permissions": [
     "alarms",

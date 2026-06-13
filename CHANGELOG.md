@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.18] — refonte de l'onboarding (axé auto-demande)
+
+### Changes
+- Onboarding repensé (visuel + texte), angle « drop hunter » : titre FOMO, flux en 3 étapes (on surveille → on demande → tu achètes), badge « 100% automatique » pulsé
+- Panneau d'activation central avec bouton « ⚡ Activer l'auto-demande » qui active l'option en un clic (`onboarding.js`, page d'extension), avec rappel de l'unique action requise (connexion Amazon) et note CGU honnête mais discrète
+- Étapes secondaires condensées (son/notif, scan, vue compacte, confidentialité)
+
 ## [0.1.17] — bascule de vue compacte (bouton unique)
 
 ### Changes

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12] — son d'alerte + export/import
+
+### Features
+- Son d'alerte joué quand une invitation devient disponible ou que tu es sélectionné (carillon distinct pour « sélectionné »), via un document offscreen WebAudio — activable/désactivable depuis les réglages (ON par défaut)
+- Les notifications « sélectionné » restent affichées jusqu'à action de l'user (`requireInteraction`)
+- Export de la watchlist custom + réglages dans un fichier JSON, et import/restauration depuis ce fichier (fusion dédoublonnée par ASIN, sans re-validation réseau)
+
 ## [0.1.10] — SEO fiche store
 
 ### Changes

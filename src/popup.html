@@ -766,6 +766,14 @@
               <div id="pokemonFeedDate" class="feed-date" hidden></div>
 
               <label class="toggle-row">
+                <input id="soundEnabled" type="checkbox" />
+                <span>
+                  <b>Son d'alerte</b>
+                  <span class="hint">Activé par défaut. Joue un son quand une invitation devient disponible ou que tu es sélectionné.</span>
+                </span>
+              </label>
+
+              <label class="toggle-row">
                 <input id="autoRequest" type="checkbox" />
                 <span>
                   <b>Auto-demander les invitations</b>
@@ -776,6 +784,12 @@
               <div class="auto-note" id="autoRequestNote">
                 Rappel : cette automatisation peut être contraire aux conditions d’utilisation d’Amazon. Utilisation à tes risques.
               </div>
+
+              <div class="mini-actions">
+                <button id="export" title="Exporter la watchlist et les réglages">Exporter</button>
+                <button id="import" title="Importer une sauvegarde">Importer</button>
+              </div>
+              <input id="importFile" type="file" accept="application/json,.json" hidden />
 
               <div class="mini-actions">
                 <a class="button-link support" href="https://buymeacoffee.com/amzinvite" target="_blank" rel="noopener">Buy Me a Coffee</a>

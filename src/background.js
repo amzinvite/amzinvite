@@ -52,6 +52,7 @@ async function getSettings() {
     "trackPokemonTcgFr",
     "telemetryEnabled",
     "scrapeEnabled",
+    "soundEnabled",
   ]);
   const communityDataEnabled = cfg.communityDataEnabled == null
     ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled)
@@ -61,6 +62,7 @@ async function getSettings() {
     autoRequest: !!cfg.autoRequest,
     communityDataEnabled,
     trackPokemonTcgFr: !!cfg.trackPokemonTcgFr,
+    soundEnabled: cfg.soundEnabled == null ? true : !!cfg.soundEnabled,
   };
 }
 
@@ -368,7 +370,36 @@ async function createProductNotification(kind, { url, title, message, priority =
     title,
     message,
     priority,
+    // Les invitations acceptées restent affichées jusqu'à action de l'user.
+    requireInteraction: kind === "accepted",
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Son d'alerte — joué via un document offscreen (le service worker MV3
+// n'a pas accès à l'API Audio / WebAudio directement)
+// ─────────────────────────────────────────────────────────────────────────
+let creatingOffscreen = null;
+async function ensureOffscreenAudio() {
+  if (await chrome.offscreen.hasDocument?.()) return;
+  if (creatingOffscreen) { await creatingOffscreen; return; }
+  creatingOffscreen = chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["AUDIO_PLAYBACK"],
+    justification: "Jouer un son d'alerte quand une invitation devient disponible ou acceptée.",
+  }).finally(() => { creatingOffscreen = null; });
+  await creatingOffscreen;
+}
+
+async function playAlertSound(kind) {
+  const { soundEnabled } = await getSettings();
+  if (!soundEnabled) return;
+  try {
+    await ensureOffscreenAudio();
+    await chrome.runtime.sendMessage({ type: "play-sound", kind });
+  } catch (e) {
+    console.warn("[amzinvite] play sound failed:", e);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -773,6 +804,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     getPrice(msg.asin).then((entry) => sendResponse({ ok: true, entry })).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg?.type === "export-data") {
+    exportData().then((data) => sendResponse({ ok: true, data })).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "import-data") {
+    importData(msg.data).then((res) => sendResponse({ ok: true, ...res })).catch((e) => sendResponse({ ok: false, error: String(e.message || e) }));
+    return true;
+  }
   if (msg?.type === "reset-instance") {
     chrome.storage.local.clear().then(async () => {
       await updateActionBadge([]);
@@ -823,6 +862,63 @@ async function removeCustomUrl(url) {
     customUrls: normalizedCustom.filter((entry) => entry.url !== url),
   });
   await updateActionBadge();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Export / import — sauvegarde locale de la watchlist et des réglages
+// ─────────────────────────────────────────────────────────────────────────
+const EXPORT_VERSION = 1;
+
+async function exportData() {
+  const settings = await getSettings();
+  const { customUrls } = await chrome.storage.local.get("customUrls");
+  return {
+    app: "amzinvite",
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    customUrls: (customUrls || []).map((entry) => normalizeCustomEntry(entry)),
+    settings: {
+      intervalMin: settings.intervalMin,
+      autoRequest: settings.autoRequest,
+      communityDataEnabled: settings.communityDataEnabled,
+      trackPokemonTcgFr: settings.trackPokemonTcgFr,
+      soundEnabled: settings.soundEnabled,
+    },
+  };
+}
+
+async function importData(data) {
+  if (!data || data.app !== "amzinvite" || !Array.isArray(data.customUrls)) {
+    throw new Error("Fichier de sauvegarde invalide.");
+  }
+  // Fusion des URLs custom (pas de re-validation réseau : on fait confiance
+  // au fichier exporté). Dédoublonnage par ASIN.
+  const { customUrls } = await chrome.storage.local.get("customUrls");
+  const existing = (customUrls || []).map((entry) => normalizeCustomEntry(entry));
+  const seen = new Set(existing.map((e) => asinFromUrl(e.url)).filter(Boolean));
+  let added = 0;
+  for (const raw of data.customUrls) {
+    const entry = normalizeCustomEntry(raw);
+    const asin = asinFromUrl(entry.url);
+    if (!entry.url || (asin && seen.has(asin))) continue;
+    if (asin) seen.add(asin);
+    existing.push(entry);
+    added++;
+  }
+  const patch = { customUrls: existing };
+  // Réglages : appliqués seulement s'ils sont présents dans le fichier.
+  const s = data.settings;
+  if (s && typeof s === "object") {
+    if (Number.isFinite(s.intervalMin)) patch.intervalMin = Math.max(5, s.intervalMin);
+    if (typeof s.autoRequest === "boolean") patch.autoRequest = s.autoRequest;
+    if (typeof s.communityDataEnabled === "boolean") patch.communityDataEnabled = s.communityDataEnabled;
+    if (typeof s.trackPokemonTcgFr === "boolean") patch.trackPokemonTcgFr = s.trackPokemonTcgFr;
+    if (typeof s.soundEnabled === "boolean") patch.soundEnabled = s.soundEnabled;
+  }
+  await chrome.storage.local.set(patch);
+  await scheduleAlarm();
+  await updateActionBadge();
+  return { added, total: existing.length };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -945,6 +1041,7 @@ async function runCheckOnce({ force = false } = {}) {
           message: `${it.name || asin} — clique pour acheter (72h max)`,
           priority: 2,
         });
+        await playAlertSound("accepted");
       } else if (state === "available" && prevState !== "available") {
         await createProductNotification("available", {
           url: it.url,
@@ -952,6 +1049,7 @@ async function runCheckOnce({ force = false } = {}) {
           message: it.name || asin,
           priority: 1,
         });
+        await playAlertSound("available");
       }
     } catch (e) {
       summary.errors++;

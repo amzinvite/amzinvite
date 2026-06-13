@@ -164,6 +164,7 @@ async function persistSettings({ reschedule = false } = {}) {
     autoRequest: $("autoRequest").checked,
     communityDataEnabled: $("communityDataEnabled").checked,
     trackPokemonTcgFr: $("trackPokemonTcgFr").checked,
+    soundEnabled: $("soundEnabled").checked,
   });
   await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   if (reschedule) {
@@ -179,6 +180,7 @@ async function load() {
     "autoRequest",
     "communityDataEnabled",
     "trackPokemonTcgFr",
+    "soundEnabled",
     "telemetryEnabled",
     "scrapeEnabled",
     "lastRun",
@@ -194,6 +196,7 @@ async function load() {
     cfg.communityDataEnabled == null ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled) : cfg.communityDataEnabled,
   );
   setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr);
+  setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
   renderAutoRequestNote();
   await renderPokemonFeedDate();
   renderAmazonStatus();
@@ -694,6 +697,44 @@ $("addUrl").addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     $("addBtn").click();
+  }
+});
+
+$("soundEnabled").addEventListener("change", async () => {
+  await persistSettings();
+});
+
+$("export").addEventListener("click", async () => {
+  setError("");
+  const res = await sendMessage({ type: "export-data" });
+  if (!res?.ok) { setError("Export impossible."); return; }
+  const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `amzinvite-sauvegarde-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  $("sub").textContent = "Sauvegarde exportée";
+});
+
+$("import").addEventListener("click", () => $("importFile").click());
+
+$("importFile").addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  setError("");
+  try {
+    const data = JSON.parse(await file.text());
+    const res = await sendMessage({ type: "import-data", data });
+    if (!res?.ok) throw new Error(res?.error || "Import impossible");
+    await load();
+    $("settings").classList.add("open");
+    $("sub").textContent = `Import : ${res.added} produit(s) ajouté(s)`;
+  } catch (err) {
+    setError(`Import impossible : ${err.message || err}`);
   }
 });
 

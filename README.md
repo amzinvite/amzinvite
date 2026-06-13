@@ -32,6 +32,7 @@ Lien à venir.
 | Option | Défaut | Description |
 |---|---|---|
 | Intervalle auto | 30 min | Fréquence de vérification automatique |
+| Son d'alerte | ON | Joue un son quand une invitation s'ouvre ou que tu es sélectionné |
 | Partage anonyme | ON | Aide à améliorer le feed et le catalogue |
 | Suivi POKÉMON TCG FR | OFF | Active le suivi automatique du feed public |
 | Auto-demander | OFF | Envoie la demande d'invitation automatiquement |
@@ -41,6 +42,7 @@ Lien à venir.
 - sans option activée, l'extension ne suit rien automatiquement
 - tu peux ajouter un produit manuellement via son lien Amazon en mode invitation
 - tu peux activer le suivi automatique de POKÉMON TCG FR depuis les réglages
+- tu peux exporter ta watchlist + tes réglages dans un fichier JSON et les réimporter (sauvegarde / changement de machine)
 - l'item en cours de vérification remonte en tête de liste avec une barre de progression, un compte à rebours et un ETA global
 - un bouton de scan individuel permet de relancer un check unitaire sur n'importe quel produit
 - les miniatures sont extraites automatiquement lors des checks et mises en cache localement

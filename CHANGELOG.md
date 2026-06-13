@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.19] — barre d'actions sur une seule ligne
+
+### Fixes
+- Le bouton « Vérifier maintenant » se réduit pour que la bascule de vue et les réglages tiennent sur la même ligne (la grille passait le 3e bouton à la ligne)
+
 ## [0.1.18] — refonte de l'onboarding (axé auto-demande)
 
 ### Changes

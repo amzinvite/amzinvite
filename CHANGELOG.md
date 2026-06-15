@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.21] — fix fausse notif sur invitation expirée
+
+### Fixes
+- Une invitation expirée (`hdp_expired_desktop`, fenêtre d'achat de 72h dépassée) était classée comme `available`, ce qui déclenchait une fausse notif « 🎟️ Invitation dispo » au re-scan. Elle est désormais classée `already_requested` (état réellement affiché par Amazon : plus achetable), donc plus aucune notif à tort (`content.js`, `detector.js`)
+
 ## [0.1.20] — onboarding : précision « Chrome ouvert »
 
 ### Changes

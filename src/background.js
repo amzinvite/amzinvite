@@ -33,6 +33,7 @@ const FEED_REFRESH_MS = 30 * 60 * 1000; // 30 min
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const BUYABLE_BADGE_BG = "#1D7A52";
+const MAX_NEW_FEED_NOTIFICATIONS = 3;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Identifiant d'instance anonyme — généré au premier lancement
@@ -97,6 +98,10 @@ async function hmacSign(payload, timestamp) {
 // Watchlist hybride : feed public + URLs custom ajoutées par l'user
 // ─────────────────────────────────────────────────────────────────────────
 async function refreshPublicFeed() {
+  const { publicFeed: previousFeed, publicFeedFetchedAt } = await chrome.storage.local.get([
+    "publicFeed",
+    "publicFeedFetchedAt",
+  ]);
   const timeout = withTimeout();
   // Requête signée HMAC (même schéma que le feedback) : la signature porte
   // sur le path, pour éviter que l'URL du feed ne soit scrapable au curl.
@@ -117,7 +122,44 @@ async function refreshPublicFeed() {
     publicFeed: items,
     publicFeedFetchedAt: Date.now(),
   });
+  await notifyNewPublicFeedItems(previousFeed || [], items, { canNotify: !!publicFeedFetchedAt });
   return items;
+}
+
+async function notifyNewPublicFeedItems(previousFeed, nextFeed, { canNotify = true } = {}) {
+  if (!canNotify || !Array.isArray(nextFeed) || nextFeed.length === 0) return;
+
+  const previousAsins = new Set(
+    (previousFeed || [])
+      .map((item) => asinFromUrl(item?.url))
+      .filter(Boolean),
+  );
+  const freshItems = nextFeed.filter((item) => {
+    const asin = asinFromUrl(item?.url);
+    return asin && !previousAsins.has(asin);
+  });
+  if (!freshItems.length) return;
+
+  for (const item of freshItems.slice(0, MAX_NEW_FEED_NOTIFICATIONS)) {
+    const asin = asinFromUrl(item.url);
+    await createProductNotification("feed_new", {
+      url: item.url,
+      title: "Nouveau lien Amazon dans le feed",
+      message: item.name || asin,
+      priority: 0,
+    });
+  }
+
+  const remaining = freshItems.length - MAX_NEW_FEED_NOTIFICATIONS;
+  if (remaining > 0) {
+    await chrome.notifications.create(`feed-new-summary-${Date.now()}`, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: "Nouveaux liens Amazon dans le feed",
+      message: `${freshItems.length} nouveaux produits détectés, dont ${remaining} autre(s) non affiché(s).`,
+      priority: 0,
+    });
+  }
 }
 
 async function clearPublicFeed() {

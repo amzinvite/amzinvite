@@ -18,6 +18,7 @@ let singleScanCdTimer = null;
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
+const NEW_FEED_ITEM_MS = 15 * 24 * 60 * 60 * 1000;
 
 const STATE_LABELS = {
   available: { txt: "Dispo à demander", cls: "available" },
@@ -82,6 +83,11 @@ function asinFromUrl(url) {
 function shortPath(url) {
   const asin = asinFromUrl(url);
   return asin ? `/dp/${asin}` : url;
+}
+
+function isNewFeedItem(item) {
+  const firstSeenMs = Number(item?.first_seen || 0) * 1000;
+  return !!firstSeenMs && Date.now() - firstSeenMs <= NEW_FEED_ITEM_MS;
 }
 
 function escapeHTML(s) {
@@ -509,6 +515,12 @@ function renderList(items, showAll) {
     const aScanning = currentScanUrl && a.url === currentScanUrl ? 1 : 0;
     const bScanning = currentScanUrl && b.url === currentScanUrl ? 1 : 0;
     if (aScanning !== bScanning) return bScanning - aScanning;
+    const aAccepted = (a.known_state || "unknown") === "accepted" ? 1 : 0;
+    const bAccepted = (b.known_state || "unknown") === "accepted" ? 1 : 0;
+    if (aAccepted !== bAccepted) return bAccepted - aAccepted;
+    const aNew = isNewFeedItem(a) ? 1 : 0;
+    const bNew = isNewFeedItem(b) ? 1 : 0;
+    if (aNew !== bNew) return bNew - aNew;
     const sa = a.known_state || "z";
     const sb = b.known_state || "z";
     return (order[sa] ?? 99) - (order[sb] ?? 99);
@@ -567,12 +579,18 @@ function renderList(items, showAll) {
     const expiryTag = state === "accepted" && item.expiry_info?.text
       ? `<div class="expiry-text">⏱ ${escapeHTML(item.expiry_info.text)}</div>`
       : "";
+    const newTag = isNewFeedItem(item)
+      ? `<span class="new-badge" title="Ajouté au feed dans les 15 derniers jours">NEW</span>`
+      : "";
 
     const asin = asinFromUrl(item.url);
     li.innerHTML = `
       ${imgTag}
       <div class="body">
-        <div class="name" title="${escapeAttr(item.name || asin || item.url)}">${escapeHTML(item.name || asin || item.url)}</div>
+        <div class="name-row">
+          ${newTag}
+          <div class="name" title="${escapeAttr(item.name || asin || item.url)}">${escapeHTML(item.name || asin || item.url)}</div>
+        </div>
         <span class="price-tag" data-asin="${escapeAttr(asin || "")}"></span>
         <div class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asinFromUrl(item.url) || shortPath(item.url))}</a></div>
         ${expiryTag}

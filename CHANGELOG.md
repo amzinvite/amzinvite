@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.22] — nouveautés du feed Amazon
+
+### Features
+- Badge `NEW` sur les produits du feed ajoutés dans les 15 derniers jours
+- Notification navigateur quand un refresh du feed détecte un nouveau lien Amazon
+
+### Changes
+- Tri de la popup ajusté : les produits sélectionnés restent tout en haut, puis les nouveautés, puis le reste du suivi
+
 ## [0.1.21] — fix fausse notif sur invitation expirée
 
 ### Fixes

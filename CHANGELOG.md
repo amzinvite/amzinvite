@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.23] — authentification aléatoire par installation
+
+### Security
+- Enrôlement automatique d'un credential HMAC aléatoire propre à chaque installation
+- Credential séparé et renouvelé toutes les 48 h pour les observations anonymes, sans `instanceId`
+- Fallback temporaire sur l'ancien secret partagé pour assurer une migration sans coupure
+
 ## [0.1.22] — nouveautés du feed Amazon
 
 ### Features

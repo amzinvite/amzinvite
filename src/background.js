@@ -22,7 +22,16 @@ import { detectInvitationState, extractBuyboxText } from "./detector.js";
 // ─────────────────────────────────────────────────────────────────────────
 const API_BASE = "https://amzinvite-api.amzinvite.workers.dev";
 const FEED_SIG_PAYLOAD = "/api/public/invitations"; // doit matcher le backend
-const HMAC_SECRET = "0b950ea0a74ecd36f73218b7aef389bfe610e6053fe85371ddf4f351ff2ce89a";
+// Compatibilité temporaire avec les extensions < 0.1.23. À retirer quand le
+// backend aura désactivé EXTENSION_LEGACY_AUTH_ENABLED.
+const LEGACY_HMAC_SECRET = "0b950ea0a74ecd36f73218b7aef389bfe610e6053fe85371ddf4f351ff2ce89a";
+const AUTH_REGISTER_PATH = "/api/extension/register";
+const AUTH_V2_STORAGE_KEYS = {
+  instance: "authV2InstanceCredential",
+  observations: "authV2ObservationCredential",
+};
+const AUTH_V2_OBSERVATION_ROTATE_AHEAD_MS = 6 * 60 * 60 * 1000;
+const authV2RegistrationPromises = new Map();
 const ALARM_NAME = "invitation-check";
 const DEFAULT_INTERVAL_MIN = 30;
 const PER_REQUEST_DELAY_MS = 8_000;
@@ -77,13 +86,15 @@ async function hasTrackingSources() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// HMAC signing pour les endpoints de feedback (anti-bot soft)
+// Authentification v2 — secret aléatoire propre à l'installation. Les
+// observations utilisent un credential séparé et court afin de ne pas les
+// rattacher durablement à l'instance.
 // ─────────────────────────────────────────────────────────────────────────
-async function hmacSign(payload, timestamp) {
+async function hmacSign(payload, timestamp, secret = LEGACY_HMAC_SECRET) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
-    enc.encode(HMAC_SECRET),
+    enc.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -92,6 +103,87 @@ async function hmacSign(payload, timestamp) {
   return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function isUsableV2Credential(value, scope) {
+  if (!value || value.scope !== scope) return false;
+  if (!/^[0-9a-f-]{36}$/i.test(value.credentialId || "")) return false;
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(value.secret || "")) return false;
+  if (scope === "observations") {
+    return Number(value.expiresAt || 0) - AUTH_V2_OBSERVATION_ROTATE_AHEAD_MS > Date.now();
+  }
+  return true;
+}
+
+async function registerV2Credential(scope, instanceId = null) {
+  const body = JSON.stringify(scope === "instance" ? { scope, instanceId } : { scope });
+  const timeout = withTimeout();
+  const response = await fetch(`${API_BASE}${AUTH_REGISTER_PATH}`, {
+    method: "POST",
+    signal: timeout.signal,
+    headers: { "Content-Type": "application/json" },
+    body,
+  }).finally(timeout.done);
+  if (!response.ok) throw new Error(`auth registration HTTP ${response.status}`);
+
+  const credential = await response.json();
+  if (!isUsableV2Credential(credential, scope)) {
+    throw new Error("auth registration returned an invalid credential");
+  }
+  await chrome.storage.local.set({ [AUTH_V2_STORAGE_KEYS[scope]]: credential });
+  return credential;
+}
+
+async function getV2Credential(scope, instanceId = null) {
+  const storageKey = AUTH_V2_STORAGE_KEYS[scope];
+  const stored = (await chrome.storage.local.get(storageKey))[storageKey];
+  if (isUsableV2Credential(stored, scope)) return stored;
+  if (!authV2RegistrationPromises.has(scope)) {
+    const registration = registerV2Credential(scope, instanceId)
+      .finally(() => authV2RegistrationPromises.delete(scope));
+    authV2RegistrationPromises.set(scope, registration);
+  }
+  return authV2RegistrationPromises.get(scope);
+}
+
+async function authHeaders(payload, scope, instanceId = null) {
+  const ts = Math.floor(Date.now() / 1000).toString();
+  try {
+    const credential = await getV2Credential(scope, instanceId);
+    return {
+      ...(instanceId ? { "X-Instance-Id": instanceId } : {}),
+      "X-Auth-Version": "2",
+      "X-Credential-Id": credential.credentialId,
+      "X-Ts": ts,
+      "X-Sig": await hmacSign(payload, ts, credential.secret),
+    };
+  } catch (error) {
+    // Déploiement smooth : une nouvelle extension continue de fonctionner si
+    // elle atteint momentanément un backend qui ne connaît pas encore v2.
+    console.warn("[amzinvite] auth v2 unavailable, using legacy fallback:", error);
+    return {
+      ...(instanceId ? { "X-Instance-Id": instanceId } : {}),
+      "X-Ts": ts,
+      "X-Sig": await hmacSign(payload, ts),
+    };
+  }
+}
+
+async function authenticatedFetch(url, options, { payload, scope, instanceId = null }) {
+  let headers = await authHeaders(payload, scope, instanceId);
+  let response = await fetch(url, {
+    ...options,
+    headers: { ...(options.headers || {}), ...headers },
+  });
+  if (response.status === 401 && headers["X-Auth-Version"] === "2") {
+    await chrome.storage.local.remove(AUTH_V2_STORAGE_KEYS[scope]);
+    headers = await authHeaders(payload, scope, instanceId);
+    response = await fetch(url, {
+      ...options,
+      headers: { ...(options.headers || {}), ...headers },
+    });
+  }
+  return response;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -106,15 +198,12 @@ async function refreshPublicFeed() {
   // Requête signée HMAC (même schéma que le feedback) : la signature porte
   // sur le path, pour éviter que l'URL du feed ne soit scrapable au curl.
   const instanceId = await getInstanceId();
-  const ts = Math.floor(Date.now() / 1000).toString();
-  const sig = await hmacSign(FEED_SIG_PAYLOAD, ts);
-  const r = await fetch(`${API_BASE}/api/public/invitations`, {
+  const r = await authenticatedFetch(`${API_BASE}/api/public/invitations`, {
     signal: timeout.signal,
-    headers: {
-      "X-Instance-Id": instanceId,
-      "X-Ts": ts,
-      "X-Sig": sig,
-    },
+  }, {
+    payload: FEED_SIG_PAYLOAD,
+    scope: "instance",
+    instanceId,
   }).finally(timeout.done);
   if (!r.ok) throw new Error(`feed HTTP ${r.status}`);
   const items = await r.json();
@@ -464,17 +553,14 @@ async function sendFeedback(asin, state, source = "bg_check") {
   try {
     const instanceId = await getInstanceId();
     const body = JSON.stringify({ asin, state, source, observedAt: Math.floor(Date.now() / 1000) });
-    const ts = Math.floor(Date.now() / 1000).toString();
-    const sig = await hmacSign(body, ts);
-    await fetch(`${API_BASE}/api/extension/feedback`, {
+    await authenticatedFetch(`${API_BASE}/api/extension/feedback`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Instance-Id": instanceId,
-        "X-Ts": ts,
-        "X-Sig": sig,
-      },
+      headers: { "Content-Type": "application/json" },
       body,
+    }, {
+      payload: body,
+      scope: "instance",
+      instanceId,
     });
   } catch (e) {
     console.warn("[amzinvite] feedback failed:", e);
@@ -515,17 +601,14 @@ async function forwardScrape(items) {
     // Anonymisation : pas d'instanceId envoyé avec les observations scrape,
     // juste un dayBucket hashé pour rate-limit serveur.
     const dayBucket = new Date().toISOString().slice(0, 10);
-    const ts = Math.floor(Date.now() / 1000).toString();
     const body = JSON.stringify({ items, dayBucket });
-    const sig = await hmacSign(body, ts);
-    await fetch(`${API_BASE}/api/extension/observations`, {
+    await authenticatedFetch(`${API_BASE}/api/extension/observations`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Ts": ts,
-        "X-Sig": sig,
-      },
+      headers: { "Content-Type": "application/json" },
       body,
+    }, {
+      payload: body,
+      scope: "observations",
     });
     return { sent: items.length };
   } catch (e) {

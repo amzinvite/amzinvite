@@ -1,6 +1,6 @@
 # Privacy Policy — amzinvite
 
-**Dernière mise à jour :** 2026-05-22
+**Dernière mise à jour :** 2026-07-30
 
 amzinvite est conçu pour fonctionner avec un minimum de données.
 
@@ -9,6 +9,8 @@ amzinvite est conçu pour fonctionner avec un minimum de données.
 Les informations suivantes restent dans le navigateur :
 
 - `instanceId` : identifiant anonyme généré localement
+- des credentials d'authentification aléatoires : un lié à l'instance et un
+  credential court distinct pour les observations anonymes
 - `intervalMin`, `autoRequest`, `communityDataEnabled`, `trackPokemonTcgFr` : préférences de l'extension
 - `customUrls` : liens Amazon ajoutés manuellement
 - `knownStates` : états détectés pour les produits suivis

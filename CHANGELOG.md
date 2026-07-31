@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.24] — fiabilité des observations Amazon
+
+### Fixes
+- Extraction du vrai titre produit sur le nouveau layout des listings Amazon,
+  au lieu de la marque affichée dans le premier `h2`
+- Remontée explicite de `stock_status` pour les observations issues des listings
+- Conservation des centimes lorsque le prix Amazon est séparé entre parties
+  entière et décimale
+
 ## [0.1.23] — authentification aléatoire par installation
 
 ### Security

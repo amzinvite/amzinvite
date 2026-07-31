@@ -8,14 +8,46 @@ console.log("[amzinvite] listing script loaded on", location.href);
     return window.AlerterAmazonDom.parsePrice(s);
   }
 
+  function extractListingName(card) {
+    // Le layout Amazon 2026 sépare désormais la marque dans <h2> et le vrai
+    // titre dans un lien line-clamp adjacent. Garder les anciens sélecteurs en
+    // fallback pour les variantes de listing encore servies par Amazon.
+    const titleEl = card.querySelector(
+      "a.s-line-clamp-2, a.s-line-clamp-3, " +
+      "[data-cy='title-recipe'] a, h2 a",
+    );
+    const title = titleEl?.textContent?.trim();
+    if (title) return title;
+
+    const heading = card.querySelector("h2[aria-label]");
+    const ariaLabel = heading?.getAttribute("aria-label")?.trim();
+    if (ariaLabel) return ariaLabel;
+
+    return card.querySelector("h2 span")?.textContent?.trim() || null;
+  }
+
+  function extractListingPrice(card) {
+    const offscreen = card.querySelector(".a-price .a-offscreen");
+    if (offscreen?.textContent) return parsePrice(offscreen.textContent);
+
+    // Certains listings n'exposent plus le span accessible complet et
+    // séparent euros/centimes. Ne jamais réduire 11,99 € à 11 €.
+    const whole = card.querySelector(".a-price-whole")?.textContent?.trim();
+    if (!whole) return null;
+    const fraction = card.querySelector(".a-price-fraction")?.textContent?.trim();
+    const combined = fraction
+      ? `${whole.replace(/[^\d]/g, "")},${fraction.replace(/[^\d]/g, "")}`
+      : whole;
+    return parsePrice(combined);
+  }
+
   function extractCard(card) {
     const asin = card.getAttribute("data-asin");
     if (!asin) return null;
     // Skip sponsored & out-of-bounds
     if (card.querySelector("[class*='AdHolder'], [data-component-type='sp-sponsored-result']")) return null;
 
-    const nameEl = card.querySelector("h2 a span, h2 span");
-    const name = nameEl?.textContent?.trim();
+    const name = extractListingName(card);
     if (!name) return null;
 
     // Filtre non-TCG identique à scrapers/listing_amazon.py
@@ -23,8 +55,7 @@ console.log("[amzinvite] listing script loaded on", location.href);
       return null;
     }
 
-    const priceEl = card.querySelector(".a-price .a-offscreen, .a-price-whole");
-    const price = priceEl ? parsePrice(priceEl.textContent) : null;
+    const price = extractListingPrice(card);
 
     const linkEl = card.querySelector("h2 a, a.s-no-outline, a[href*='/dp/']");
     const href = linkEl?.getAttribute("href") || "";
@@ -33,8 +64,11 @@ console.log("[amzinvite] listing script loaded on", location.href);
     const imgEl = card.querySelector("img.s-image, img[data-image-latency]");
     const image_url = window.AlerterAmazonDom.extractImageFromElement(imgEl);
 
-    let in_stock = true;
-    if (card.querySelector("[class*='Unavailable']")) in_stock = false;
+    const unavailable = !!card.querySelector("[class*='Unavailable']");
+    const in_stock = unavailable ? false : (price != null ? true : null);
+    const stock_status = unavailable
+      ? "out_of_stock"
+      : (price != null ? "in_stock" : null);
 
     return {
       site: "amazon",
@@ -43,6 +77,7 @@ console.log("[amzinvite] listing script loaded on", location.href);
       name,
       price,
       in_stock,
+      stock_status,
       image_url,
       source_url: location.href,
     };
@@ -57,6 +92,9 @@ console.log("[amzinvite] listing script loaded on", location.href);
     });
     return items;
   }
+
+  // Surface minuscule utilisée par les tests de non-régression DOM.
+  window.AmzinviteListing = { extractCard, extractListingName, extractListingPrice };
 
   // Délégation au SW pour éviter le mixed-content blocking (HTTPS → HTTP localhost).
   function post(items) {

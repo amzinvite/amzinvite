@@ -2,6 +2,8 @@
 
 Extension Chrome qui surveille les produits Amazon en mode invitation et te prévient quand un produit s'ouvre ou quand tu es sélectionné.
 
+[Installer amzinvite depuis le Chrome Web Store](https://chromewebstore.google.com/detail/amzinvite-%E2%80%94-invitations-a/omnadclklfdghknlhgfilpinklhgophe)
+
 ## Ce que fait l'extension
 
 - suit automatiquement les produits POKÉMON TCG FR par défaut (désactivable d'un clic, ce qui retire alors tous les produits du feed)
@@ -20,7 +22,8 @@ Extension Chrome qui surveille les produits Amazon en mode invitation et te pré
 ## Installation
 
 ### Depuis le Chrome Web Store
-Lien à venir.
+
+[Installer la version officielle](https://chromewebstore.google.com/detail/amzinvite-%E2%80%94-invitations-a/omnadclklfdghknlhgfilpinklhgophe). Les mises à jour sont ensuite distribuées automatiquement par Chrome.
 
 ### En mode développeur
 
@@ -50,6 +53,14 @@ Lien à venir.
 - les miniatures sont extraites automatiquement lors des checks et mises en cache localement
 - « Comparer sur PrixTCG » ouvre une fiche PrixTCG avec la provenance
   `amzinvite`; les liens marchands restent ensuite gérés par le site PrixTCG
+
+## PrixTCG et liens sortants
+
+- amzinvite n'intègre pas de lien affilié Amazon
+- les liens « Comparer sur PrixTCG » sont toujours déclenchés volontairement par l'utilisateur
+- l'ASIN sert uniquement à retrouver la fiche correspondante sur PrixTCG
+- la provenance `amzinvite` permet de mesurer l'utilité de l'extension sans transmettre l'identité de l'utilisateur
+- une fois sur PrixTCG, les éventuels liens marchands et leur transparence sont gérés par PrixTCG
 
 ## Confidentialité
 

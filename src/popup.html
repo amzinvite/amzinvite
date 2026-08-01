@@ -673,6 +673,20 @@
       .link a:hover {
         text-decoration: underline;
       }
+      .product-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 10px;
+        margin-top: 4px;
+      }
+      .product-links .link {
+        margin-top: 0;
+      }
+      .prixtcg-product-link {
+        color: var(--brand);
+        font-weight: 800;
+      }
       .link-icon {
         width: 10px;
         height: 10px;
@@ -919,12 +933,14 @@
         <div class="empty" id="empty"></div>
 
         <div class="footer-actions">
+          <a href="https://prixtcg.fr/pokemon/catalogue?source=amzinvite" target="_blank" rel="noopener noreferrer" title="Découvrir le comparateur de prix Pokémon TCG PrixTCG">PrixTCG</a>
           <a href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
           <a href="https://github.com/amzinvite/amzinvite" target="_blank" rel="noopener">GitHub</a>
         </div>
       </div>
     </div>
 
+    <script src="prixtcg.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

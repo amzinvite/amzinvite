@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.25] — comparaison PrixTCG
+
+### Features
+- Lien explicite « Comparer sur PrixTCG » pour chaque produit suivi
+- Résolution du produit par ASIN sur PrixTCG, sans lien affilié Amazon dans l'extension
+- Provenance `amzinvite` conservée jusqu'aux clics marchands du comparateur
+
 ## [0.1.24] — fiabilité des observations Amazon
 
 ### Fixes

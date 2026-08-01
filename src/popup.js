@@ -584,6 +584,10 @@ function renderList(items, showAll) {
       : "";
 
     const asin = asinFromUrl(item.url);
+    const prixtcgUrl = globalThis.AmzinvitePrixTcg?.productComparisonUrl(item.url);
+    const prixtcgTag = prixtcgUrl
+      ? `<span class="link"><a class="prixtcg-product-link" href="${escapeAttr(prixtcgUrl)}" target="_blank" rel="noopener noreferrer" title="Comparer les prix et les marchands de ce produit sur PrixTCG">Comparer sur PrixTCG ↗</a></span>`
+      : "";
     li.innerHTML = `
       ${imgTag}
       <div class="body">
@@ -592,7 +596,10 @@ function renderList(items, showAll) {
           <div class="name" title="${escapeAttr(item.name || asin || item.url)}">${escapeHTML(item.name || asin || item.url)}</div>
         </div>
         <span class="price-tag" data-asin="${escapeAttr(asin || "")}"></span>
-        <div class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asinFromUrl(item.url) || shortPath(item.url))}</a></div>
+        <div class="product-links">
+          <span class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asin || shortPath(item.url))}</a></span>
+          ${prixtcgTag}
+        </div>
         ${expiryTag}
         ${scanTag}
       </div>

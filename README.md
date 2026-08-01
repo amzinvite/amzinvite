@@ -12,6 +12,8 @@ Extension Chrome qui surveille les produits Amazon en mode invitation et te pré
 - affiche les miniatures produits extraites depuis Amazon
 - indique si tu es connecté à ton compte Amazon
 - scan individuel par produit depuis le popup
+- propose un lien volontaire vers la fiche PrixTCG correspondante pour comparer
+  les prix, sans intégrer de lien affilié Amazon dans l'extension
 
 ## Installation
 
@@ -44,6 +46,8 @@ Lien à venir.
 - l'item en cours de vérification remonte en tête de liste avec une barre de progression, un compte à rebours et un ETA global
 - un bouton de scan individuel permet de relancer un check unitaire sur n'importe quel produit
 - les miniatures sont extraites automatiquement lors des checks et mises en cache localement
+- « Comparer sur PrixTCG » ouvre une fiche PrixTCG avec la provenance
+  `amzinvite`; les liens marchands restent ensuite gérés par le site PrixTCG
 
 ## Confidentialité
 
@@ -58,6 +62,7 @@ Voir [PRIVACY.md](./PRIVACY.md).
 
 - `src/background.js` : logique principale (checks, watchlist, feed, notifications)
 - `src/popup.html` et `src/popup.js` : interface du popup
+- `src/prixtcg.js` : construction des liens explicites vers le comparateur
 - `src/onboarding.html` : écran de bienvenue
 - `src/content.js` : détection d'état sur les pages produit Amazon
 - `src/detector.js` : logique de détection des états invitation

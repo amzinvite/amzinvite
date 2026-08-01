@@ -183,6 +183,46 @@
         gap: 8px;
         padding: 14px 16px 0;
       }
+      .auto-request-prompt {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        align-items: center;
+        gap: 8px;
+        margin: 10px 16px 0;
+        padding: 10px 10px 10px 12px;
+        border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--border));
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--brand-soft) 35%, var(--surface-strong));
+      }
+      .auto-request-prompt[hidden] { display: none; }
+      .auto-request-prompt-copy {
+        min-width: 0;
+        color: var(--text-soft);
+        font-size: 10.5px;
+        line-height: 1.4;
+      }
+      .auto-request-prompt-copy b {
+        display: block;
+        color: var(--text);
+        font-size: 11.5px;
+      }
+      .auto-request-prompt .prompt-enable {
+        min-height: 32px;
+        padding: 0 10px;
+        border-color: var(--brand);
+        color: var(--brand);
+        font-size: 10.5px;
+        font-weight: 800;
+      }
+      .auto-request-prompt .prompt-dismiss {
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-size: 16px;
+      }
       button,
       .button-link {
         appearance: none;
@@ -372,6 +412,41 @@
         border-color: var(--brand);
         background: linear-gradient(180deg, var(--brand), var(--brand-strong));
         color: #fff8f3;
+      }
+      .prixtcg-settings-link {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 11px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface-strong);
+        text-decoration: none;
+        transition: transform 0.12s ease, border-color 0.12s ease;
+      }
+      .prixtcg-settings-link:hover {
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, #e5484d 45%, var(--border));
+      }
+      .prixtcg-settings-link img {
+        width: 28px;
+        height: 28px;
+      }
+      .prixtcg-settings-link b {
+        display: block;
+        font-size: 12.5px;
+      }
+      .prixtcg-settings-link .hint {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 10.5px;
+      }
+      .prixtcg-settings-link .open-label {
+        color: #e5484d;
+        font-size: 10.5px;
+        font-weight: 800;
       }
       .err {
         display: none;
@@ -791,6 +866,42 @@
         margin-bottom: 7px;
         font-size: 28px;
       }
+      .prixtcg-persistent-link {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 10px;
+        margin: 2px 16px 14px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: color-mix(in srgb, #f7f8fa 74%, var(--surface-strong));
+        text-decoration: none;
+        transition: transform 0.12s ease, border-color 0.12s ease;
+      }
+      .prixtcg-persistent-link:hover {
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, #e5484d 42%, var(--border));
+      }
+      .prixtcg-persistent-link img {
+        width: 24px;
+        height: 24px;
+      }
+      .prixtcg-persistent-link strong {
+        display: block;
+        font-size: 11.5px;
+      }
+      .prixtcg-persistent-link small {
+        display: block;
+        margin-top: 1px;
+        color: var(--muted);
+        font-size: 9.5px;
+      }
+      .prixtcg-persistent-link .arrow {
+        color: #e5484d;
+        font-size: 12px;
+        font-weight: 800;
+      }
       .footer-actions {
         display: flex;
         justify-content: space-between;
@@ -842,6 +953,15 @@
           <button class="ghost" id="toggle-settings" title="Réglages">⚙</button>
         </div>
 
+        <div class="auto-request-prompt" id="autoRequestPrompt" hidden>
+          <div class="auto-request-prompt-copy">
+            <b>Gagner du temps ?</b>
+            Envoie automatiquement la demande quand une invitation s’ouvre.
+          </div>
+          <button class="prompt-enable" id="enableAutoRequest" type="button">Activer</button>
+          <button class="prompt-dismiss" id="dismissAutoRequestPrompt" type="button" aria-label="Ne plus proposer l’auto-demande" title="Ne plus proposer">×</button>
+        </div>
+
         <div class="err" id="err"></div>
 
         <div class="collapse-target" id="settings">
@@ -869,6 +989,15 @@
                   <input id="intervalMin" type="number" min="5" placeholder="30" />
                 </div>
               </div>
+
+              <a class="prixtcg-settings-link" href="https://prixtcg.fr/pokemon/catalogue?source=amzinvite" target="_blank" rel="noopener noreferrer" title="Ouvrir le comparateur PrixTCG">
+                <img src="icons/prixtcg-logo.svg" alt="" />
+                <span>
+                  <b>PrixTCG</b>
+                  <span class="hint">Comparer les prix et les stocks Pokémon TCG.</span>
+                </span>
+                <span class="open-label">Ouvrir ↗</span>
+              </a>
 
               <label class="toggle-row">
                 <input id="communityDataEnabled" type="checkbox" />
@@ -932,14 +1061,23 @@
         <ul class="products" id="list"></ul>
         <div class="empty" id="empty"></div>
 
+        <a class="prixtcg-persistent-link" href="https://prixtcg.fr/pokemon/catalogue?source=amzinvite" target="_blank" rel="noopener noreferrer" title="Comparer les prix Pokémon TCG sur PrixTCG">
+          <img src="icons/prixtcg-logo.svg" alt="" />
+          <span>
+            <strong>Comparer sur PrixTCG</strong>
+            <small>Prix et stocks chez les marchands TCG</small>
+          </span>
+          <span class="arrow">↗</span>
+        </a>
+
         <div class="footer-actions">
-          <a href="https://prixtcg.fr/pokemon/catalogue?source=amzinvite" target="_blank" rel="noopener noreferrer" title="Découvrir le comparateur de prix Pokémon TCG PrixTCG">PrixTCG</a>
           <a href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
           <a href="https://github.com/amzinvite/amzinvite" target="_blank" rel="noopener">GitHub</a>
         </div>
       </div>
     </div>
 
+    <script src="popup-state.js"></script>
     <script src="prixtcg.js"></script>
     <script src="popup.js"></script>
   </body>

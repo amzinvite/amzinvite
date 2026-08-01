@@ -105,6 +105,23 @@ function renderAutoRequestNote() {
   $("autoRequestNote").classList.toggle("open", $("autoRequest").checked);
 }
 
+function renderAutoRequestPrompt(state) {
+  $("autoRequestPrompt").hidden = !AmzinvitePopupState.shouldOfferAutoRequest(state);
+}
+
+async function offerAutoRequestAfterFirstCheck() {
+  const state = await chrome.storage.local.get([
+    "manualCheckHasRun",
+    "autoRequest",
+    "autoRequestPromptHandled",
+  ]);
+  if (!state.manualCheckHasRun) {
+    state.manualCheckHasRun = true;
+    await chrome.storage.local.set({ manualCheckHasRun: true });
+  }
+  renderAutoRequestPrompt(state);
+}
+
 async function renderPokemonFeedDate() {
   const el = $("pokemonFeedDate");
   if (!el) return;
@@ -213,6 +230,8 @@ async function load() {
     "lastRun",
     "showAll",
     "checkProgress",
+    "manualCheckHasRun",
+    "autoRequestPromptHandled",
   ]);
 
   $("version").textContent = `Version ${manifest?.version || "?"}`;
@@ -226,6 +245,7 @@ async function load() {
   setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
   setViewMode(!!cfg.compactMode);
   renderAutoRequestNote();
+  renderAutoRequestPrompt(cfg);
   await renderPokemonFeedDate();
   renderAmazonStatus();
   setupImagePreview();
@@ -688,6 +708,23 @@ $("intervalMin").addEventListener("change", async () => {
 $("autoRequest").addEventListener("change", async () => {
   renderAutoRequestNote();
   await persistSettings();
+  await chrome.storage.local.set({ autoRequestPromptHandled: true });
+  const state = await chrome.storage.local.get("manualCheckHasRun");
+  renderAutoRequestPrompt({ ...state, autoRequest: $("autoRequest").checked, autoRequestPromptHandled: true });
+});
+
+$("enableAutoRequest").addEventListener("click", async () => {
+  $("autoRequest").checked = true;
+  renderAutoRequestNote();
+  await persistSettings();
+  await chrome.storage.local.set({ autoRequestPromptHandled: true });
+  renderAutoRequestPrompt({ manualCheckHasRun: true, autoRequest: true, autoRequestPromptHandled: true });
+  $("sub").textContent = "Auto-demande activée";
+});
+
+$("dismissAutoRequestPrompt").addEventListener("click", async () => {
+  await chrome.storage.local.set({ autoRequestPromptHandled: true });
+  renderAutoRequestPrompt({ manualCheckHasRun: true, autoRequest: false, autoRequestPromptHandled: true });
 });
 
 $("communityDataEnabled").addEventListener("change", async () => {
@@ -798,6 +835,7 @@ $("check").addEventListener("click", async () => {
   setError("");
   $("sub").textContent = "Check en cours…";
   $("check").disabled = true;
+  await offerAutoRequestAfterFirstCheck();
 
   let settled = false;
   const finalize = async () => {

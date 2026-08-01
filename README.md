@@ -14,6 +14,8 @@ Extension Chrome qui surveille les produits Amazon en mode invitation et te pré
 - scan individuel par produit depuis le popup
 - propose un lien volontaire vers la fiche PrixTCG correspondante pour comparer
   les prix, sans intégrer de lien affilié Amazon dans l'extension
+- garde un accès discret à PrixTCG sous la liste et dans les réglages
+- propose l’auto-demande une seule fois après le premier check manuel
 
 ## Installation
 

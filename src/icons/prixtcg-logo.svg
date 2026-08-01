@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="PrixTCG">
+  <title>PrixTCG</title>
+  <circle cx="60" cy="60" r="44" fill="none" stroke="#0E1116" stroke-width="6" opacity="0.26"/>
+  <circle cx="60" cy="60" r="28" fill="none" stroke="#0E1116" stroke-width="7"/>
+  <circle cx="60" cy="60" r="12" fill="#E5484D"/>
+</svg>

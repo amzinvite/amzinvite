@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.26] — présence PrixTCG et activation guidée
+
+### Features
+- Proposition discrète d’activer l’auto-demande après le premier check manuel, avec choix mémorisé localement
+- Accès PrixTCG toujours visible sous la liste, même lorsque tous les produits ont été vérifiés ou masqués
+- Logo officiel et lien PrixTCG permanent dans les réglages
+
 ## [0.1.25] — comparaison PrixTCG
 
 ### Features

@@ -24,6 +24,7 @@ console.log("[amzinvite] product script loaded on", location.href);
     const { stock_status, in_stock } = dom.detectStockStatus();
     return {
       site: "amazon",
+      marketplace: new URL(location.href).hostname.replace(/^www\./, "").toLowerCase(),
       url: dom.canonicalUrl(asin),
       external_id: asin,
       name,

@@ -82,9 +82,27 @@ const HDP_STATE_BLOCKS = [
   { id: "hdp_invited_desktop", state: "accepted" },
   { id: "hdp_requested_desktop", state: "already_requested" },
   { id: "hdp_notRequested_desktop", state: "available" },
-  { id: "hdp_expired_desktop", state: "already_requested" },
+  { id: "hdp_expired_desktop", state: "expired" },
   { id: "hdp_consumed_desktop", state: "already_requested" },
 ];
+
+function expiredCanBeRequestedFromDom(el) {
+  if (!el) return false;
+  const controls = el.querySelectorAll?.("button, input, a[role='button']") || [];
+  return Array.from(controls).some((control) => {
+    if (control.disabled === true || control.hasAttribute?.("disabled")) return false;
+    const label = `${control.textContent || ""} ${control.value || ""} ${control.getAttribute?.("aria-label") || ""}`.toLowerCase();
+    return AVAILABLE_PHRASES.some((phrase) => label.includes(phrase));
+  });
+}
+
+function expiredCanBeRequestedFromHtml(innerHtml, fullHtml) {
+  const text = (innerHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
+  const hasRequestLabel = AVAILABLE_PHRASES.some((phrase) => text.includes(phrase));
+  const hasCredentials = /id=["']hdp-ib-csrf-token["']/i.test(fullHtml || "")
+    && /id=["']hdp-ib-ajax-endpoint["']/i.test(fullHtml || "");
+  return hasRequestLabel && hasCredentials;
+}
 
 function blockHasContent(el) {
   if (!el) return false;
@@ -140,7 +158,12 @@ function detectHdpStateFromHtml(html) {
     const inner = html.slice(tagEnd + 1, closeIdx);
     // Strip tags + whitespace pour mesurer le vrai contenu textuel.
     const size = inner.replace(/<[^>]+>/g, "").replace(/\s+/g, "").length;
-    if (size >= HDP_FILLED_MIN_CHARS) return state;
+    if (size >= HDP_FILLED_MIN_CHARS) {
+      if (state === "expired") {
+        return expiredCanBeRequestedFromHtml(inner, html) ? "available" : "already_requested";
+      }
+      return state;
+    }
   }
   return null;
 }
@@ -157,7 +180,12 @@ export function detectInvitationState(rootText, doc, rawHtml) {
   if (doc) {
     for (const { id, state } of HDP_STATE_BLOCKS) {
       const el = doc.getElementById?.(id);
-      if (blockHasContent(el)) return state;
+      if (blockHasContent(el)) {
+        if (state === "expired") {
+          return expiredCanBeRequestedFromDom(el) ? "available" : "already_requested";
+        }
+        return state;
+      }
     }
   } else if (rawHtml) {
     const hdpState = detectHdpStateFromHtml(rawHtml);

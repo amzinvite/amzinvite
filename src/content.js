@@ -9,7 +9,7 @@
     { id: "hdp_invited_desktop",      state: "accepted" },
     { id: "hdp_requested_desktop",    state: "already_requested" },
     { id: "hdp_notRequested_desktop", state: "available" },
-    { id: "hdp_expired_desktop",      state: "already_requested" },
+    { id: "hdp_expired_desktop",      state: "expired" },
     { id: "hdp_consumed_desktop",     state: "already_requested" },
   ];
 
@@ -39,8 +39,20 @@
 
   function detect() {
     for (const { id, state } of HDP_STATE_BLOCKS) {
-      if (blockHasContent(document.getElementById(id))) {
-        return { state, expiryText: state === "accepted" ? detectExpiryText() : null };
+      const el = document.getElementById(id);
+      if (blockHasContent(el)) {
+        let detectedState = state;
+        if (state === "expired") {
+          const controls = el.querySelectorAll("button, input, a[role='button']");
+          detectedState = Array.from(controls).some((control) => {
+            if (control.disabled || control.hasAttribute("disabled")) return false;
+            const label = `${control.textContent || ""} ${control.value || ""} ${control.getAttribute("aria-label") || ""}`.toLowerCase();
+            return label.includes("demander une invitation")
+              || label.includes("request an invitation")
+              || label.includes("request invitation");
+          }) ? "available" : "already_requested";
+        }
+        return { state: detectedState, expiryText: detectedState === "accepted" ? detectExpiryText() : null };
       }
     }
     return { state: "not_invitation", expiryText: null };
@@ -79,7 +91,7 @@
         font-size:11px;color:rgba(255,255,255,0.9);line-height:1.4;
       ">
         ⚠️ Connecte-toi à Amazon pour que l'extension fonctionne.
-        <a href="https://www.amazon.fr/gp/sign-in.html" target="_blank"
+        <a href="${location.origin}/gp/sign-in.html" target="_blank"
            style="color:#fff;font-weight:700;text-decoration:underline;margin-left:4px">
           Se connecter →
         </a>
@@ -183,7 +195,9 @@
         new Promise((r) => chrome.runtime.sendMessage({ type: "check-amazon-auth" }, r)),
       ]).then(([watchRes, authRes]) => {
         const isTracked = (watchRes?.items || []).some((it) => it.url === url);
-        const connected = authRes?.connected ?? null;
+        const marketplace = location.hostname.replace(/^www\./, "").toLowerCase();
+        const authState = authRes?.statuses?.[marketplace];
+        const connected = authState === "connected" ? true : authState === "disconnected" ? false : null;
         injectWidget(state, isTracked, connected);
       });
 

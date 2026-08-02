@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.27] — fiabilité Amazon et PrixTCG
+
+### Features
+- Statut de connexion Amazon France fiabilisé
+- Accès permanent au comparateur PrixTCG.fr depuis le popup et l'onboarding
+- Partage anonyme des observations limité aux pages Amazon visitées par l'utilisateur
+
+### Changes
+- Intervalle automatique minimal porté à 30 minutes et normalisation des anciennes valeurs locales
+- Documentation et onboarding enrichis pour expliquer le suivi automatique
+- Authentification individuelle v2 utilisée sans ancien secret partagé de secours
+
+### Fixes
+- Détection FR corrigée lorsque la page compte authentifiée contient aussi le lien « Utiliser un compte différent »
+- Bandeau de connexion contenu dans les marges du popup, sans débordement
+- Auto-demande après expiration rétablie uniquement lorsque la redemande est réellement possible
+- Cooldown appliqué seulement après une réponse Amazon réussie ; les erreurs restent visibles dans le résumé
+
+### Tests
+- Ajoute une matrice de détection Amazon, des tests d'intégration AUTO et un contrôle automatisé de l'archive Store
+
 ## [0.1.26] — présence PrixTCG et activation guidée
 
 ### Features

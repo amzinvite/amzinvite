@@ -7,6 +7,12 @@ assert.match(popup, /id="autoRequestPrompt" hidden/);
 assert.match(popup, /id="enableAutoRequest"/);
 assert.match(popup, /class="prixtcg-settings-link"/);
 assert.match(popup, /class="prixtcg-persistent-link"/);
+assert.match(popup, /class="fixed-header"/);
+assert.match(popup, /class="content-scroll"/);
+assert.match(popup, /class="fixed-footer"/);
+assert.match(popup, /class="mini-actions settings-links"/);
+assert.doesNotMatch(popup, /class="footer-actions"/);
+assert.match(popup, /class="fixed-footer">\s*<a class="prixtcg-persistent-link"/);
 assert.equal(
   popup.match(/href="https:\/\/prixtcg\.fr\/pokemon\/catalogue\?source=amzinvite"/g)?.length,
   2,

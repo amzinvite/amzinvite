@@ -97,6 +97,15 @@
         color: var(--text-soft);
         font-size: 17px;
       }
+      .new-release {
+        margin: 24px 28px 0;
+        padding: 16px 18px;
+        border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+        border-radius: 18px;
+        background: color-mix(in srgb, var(--brand-soft) 48%, white 52%);
+      }
+      .new-release strong { display: block; color: var(--brand-strong); font-size: 14px; }
+      .new-release p { margin: 5px 0 0; color: var(--text-soft); font-size: 13px; }
       /* Flux automatique : 3 étapes reliées */
       .flow {
         display: grid;
@@ -234,7 +243,7 @@
         .flow-arrow { transform: rotate(90deg); justify-content: center; }
         .grid { grid-template-columns: 1fr; }
         .grid, .actions, footer, .flow { padding-left: 22px; padding-right: 22px; }
-        .activate, .callout { margin-left: 22px; margin-right: 22px; }
+        .activate, .callout, .new-release { margin-left: 22px; margin-right: 22px; }
       }
     </style>
   </head>
@@ -255,11 +264,19 @@
           </p>
         </div>
 
+        <div class="new-release">
+          <strong>Nouveau · Comparateur PrixTCG</strong>
+          <p>
+            Retrouve pour chaque produit un accès volontaire à PrixTCG.fr afin de comparer
+            les prix et les stocks disponibles chez les marchands français.
+          </p>
+        </div>
+
         <div class="flow">
           <div class="flow-step">
             <div class="flow-emoji">👀</div>
             <h4>On surveille</h4>
-            <p>Les drops Pokémon TCG FR, en continu, sans rien faire de ton côté.</p>
+            <p>Les drops Pokémon TCG disponibles sur Amazon France.</p>
           </div>
           <div class="flow-arrow">→</div>
           <div class="flow-step accent">
@@ -286,7 +303,7 @@
             <button id="enable-auto" class="big-cta" type="button">⚡ Activer l'auto-demande</button>
             <span class="req">
               Pour que ça tourne : garde <strong>Chrome ouvert</strong> (ordi allumé) et
-              <a href="https://www.amazon.fr/gp/sign-in.html" target="_blank" rel="noopener">connecte-toi à ton compte Amazon</a>.
+              connecte-toi à ton compte Amazon France.
             </span>
           </div>
           <p class="tos">
@@ -311,6 +328,20 @@
             </p>
           </div>
           <div class="step">
+            <h3>Statut Amazon clair</h3>
+            <p>
+              Le statut en haut du popup indique si ta session Amazon France est connectée
+              avant de lancer les contrôles.
+            </p>
+          </div>
+          <div class="step">
+            <h3>Comparer sur PrixTCG.fr</h3>
+            <p>
+              Chaque produit propose un accès volontaire au comparateur PrixTCG pour retrouver
+              les prix et stocks disponibles chez les marchands français.
+            </p>
+          </div>
+          <div class="step">
             <h3>Scan &amp; progression en temps réel</h3>
             <p>
               Vérifie un produit à la volée, ou laisse le check global tourner avec barre de
@@ -327,10 +358,11 @@
         </div>
 
         <div class="callout">
-          🎟️ Un lien d'achat accepté par Amazon reste généralement valable 72h — garde tes notifications actives pour ne pas le laisser filer.
+          🛡️ Les contrôles automatiques sont espacés d'au moins 30 minutes pour limiter les requêtes Amazon. Un lien d'achat accepté reste généralement valable 72h.
         </div>
 
         <div class="actions">
+          <a class="button-link" href="https://prixtcg.fr/pokemon/catalogue?source=amzinvite" target="_blank" rel="noopener">Comparer sur PrixTCG.fr</a>
           <a class="button-link support" href="https://buymeacoffee.com/amzinvite" target="_blank" rel="noopener">Buy Me a Coffee</a>
           <a class="button-link" href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Lire la privacy policy</a>
         </div>

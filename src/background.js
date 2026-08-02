@@ -1,9 +1,8 @@
 // background.js — service worker MV3 d'amzinvite
 //
-// Architecture distribuée :
+// Architecture :
 //
-//   1. WATCHLIST    : combinaison d'un feed public (curé par notre scraper)
-//                     et d'URLs ajoutées manuellement par l'user
+//   1. WATCHLIST    : feed public et URLs ajoutées manuellement par l'user
 //   2. ÉTAT         : 100% local (chrome.storage.local), aucune donnée perso
 //                     ne quitte le navigateur de l'user
 //   3. DONNEES ANONYMES : opt-out via toggle settings. Si activé, envoie
@@ -11,9 +10,9 @@
 //                     pour améliorer le feed et le catalogue
 //   4. AUTO-REQUEST : opt-in avec disclaimer. POST direct à l'endpoint
 //                     d'invitation Amazon. Aucune fenêtre ouverte, aucun clic
-//   5. SCRAPING     : les content scripts scrape-amazon-* envoient les
-//                     ASINs/prix/stocks observés à notre backend quand le
-//                     partage anonyme est activé
+//   5. SCRAPING     : les content scripts peuvent envoyer les ASINs/prix/stocks
+//                     observés lorsque l'utilisateur navigue sur Amazon et que
+//                     le partage anonyme est activé. Aucun job n'est distribué.
 
 import { detectInvitationState, extractBuyboxText } from "./detector.js";
 
@@ -21,10 +20,15 @@ import { detectInvitationState, extractBuyboxText } from "./detector.js";
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────
 const API_BASE = "https://amzinvite-api.amzinvite.workers.dev";
-const FEED_SIG_PAYLOAD = "/api/public/invitations"; // doit matcher le backend
-// Compatibilité temporaire avec les extensions < 0.1.23. À retirer quand le
-// backend aura désactivé EXTENSION_LEGACY_AUTH_ENABLED.
-const LEGACY_HMAC_SECRET = "0b950ea0a74ecd36f73218b7aef389bfe610e6053fe85371ddf4f351ff2ce89a";
+const FEED_PATH = "/api/public/invitations";
+const MARKETPLACES = Object.freeze({
+  "amazon.fr": Object.freeze({
+    key: "amazon.fr", code: "FR", origin: "https://www.amazon.fr",
+    dataHost: "data.amazon.fr", locale: "fr-FR", setting: "trackPokemonTcgFr",
+    signInUrl: "https://www.amazon.fr/gp/sign-in.html",
+  }),
+});
+const SUPPORTED_MARKETPLACES = Object.keys(MARKETPLACES);
 const AUTH_REGISTER_PATH = "/api/extension/register";
 const AUTH_V2_STORAGE_KEYS = {
   instance: "authV2InstanceCredential",
@@ -34,6 +38,7 @@ const AUTH_V2_OBSERVATION_ROTATE_AHEAD_MS = 6 * 60 * 60 * 1000;
 const authV2RegistrationPromises = new Map();
 const ALARM_NAME = "invitation-check";
 const DEFAULT_INTERVAL_MIN = 30;
+const MIN_INTERVAL_MIN = 30;
 const PER_REQUEST_DELAY_MS = 8_000;
 const REQUEST_TIMEOUT_MS = 25_000;
 const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
@@ -69,7 +74,7 @@ async function getSettings() {
     ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled)
     : !!cfg.communityDataEnabled;
   return {
-    intervalMin: cfg.intervalMin || DEFAULT_INTERVAL_MIN,
+    intervalMin: Math.max(MIN_INTERVAL_MIN, Number(cfg.intervalMin) || DEFAULT_INTERVAL_MIN),
     autoRequest: !!cfg.autoRequest,
     communityDataEnabled,
     trackPokemonTcgFr: cfg.trackPokemonTcgFr == null ? true : !!cfg.trackPokemonTcgFr,
@@ -85,12 +90,32 @@ async function hasTrackingSources() {
   return !!trackPokemonTcgFr || (customUrls || []).length > 0;
 }
 
+function normalizeAmazonHostname(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
+  return SUPPORTED_MARKETPLACES.includes(host) ? host : null;
+}
+
+function marketplaceFromUrl(url) {
+  try { return normalizeAmazonHostname(new URL(url).hostname); }
+  catch { return null; }
+}
+
+function productKey(urlOrMarketplace, maybeAsin = null) {
+  const marketplace = maybeAsin ? normalizeAmazonHostname(urlOrMarketplace) : marketplaceFromUrl(urlOrMarketplace);
+  const asin = maybeAsin || asinFromUrl(urlOrMarketplace);
+  return marketplace && asin ? `${marketplace}:${String(asin).toUpperCase()}` : null;
+}
+
+function selectedMarketplaces(settings) {
+  return SUPPORTED_MARKETPLACES.filter((key) => settings[MARKETPLACES[key].setting]);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Authentification v2 — secret aléatoire propre à l'installation. Les
 // observations utilisent un credential séparé et court afin de ne pas les
 // rattacher durablement à l'instance.
 // ─────────────────────────────────────────────────────────────────────────
-async function hmacSign(payload, timestamp, secret = LEGACY_HMAC_SECRET) {
+async function hmacSign(payload, timestamp, secret) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -148,25 +173,14 @@ async function getV2Credential(scope, instanceId = null) {
 
 async function authHeaders(payload, scope, instanceId = null) {
   const ts = Math.floor(Date.now() / 1000).toString();
-  try {
-    const credential = await getV2Credential(scope, instanceId);
-    return {
-      ...(instanceId ? { "X-Instance-Id": instanceId } : {}),
-      "X-Auth-Version": "2",
-      "X-Credential-Id": credential.credentialId,
-      "X-Ts": ts,
-      "X-Sig": await hmacSign(payload, ts, credential.secret),
-    };
-  } catch (error) {
-    // Déploiement smooth : une nouvelle extension continue de fonctionner si
-    // elle atteint momentanément un backend qui ne connaît pas encore v2.
-    console.warn("[amzinvite] auth v2 unavailable, using legacy fallback:", error);
-    return {
-      ...(instanceId ? { "X-Instance-Id": instanceId } : {}),
-      "X-Ts": ts,
-      "X-Sig": await hmacSign(payload, ts),
-    };
-  }
+  const credential = await getV2Credential(scope, instanceId);
+  return {
+    ...(instanceId ? { "X-Instance-Id": instanceId } : {}),
+    "X-Auth-Version": "2",
+    "X-Credential-Id": credential.credentialId,
+    "X-Ts": ts,
+    "X-Sig": await hmacSign(payload, ts, credential.secret),
+  };
 }
 
 async function authenticatedFetch(url, options, { payload, scope, instanceId = null }) {
@@ -194,14 +208,22 @@ async function refreshPublicFeed() {
     "publicFeed",
     "publicFeedFetchedAt",
   ]);
+  const settings = await getSettings();
+  const marketplaces = selectedMarketplaces(settings);
+  if (!marketplaces.length) {
+    await chrome.storage.local.set({ publicFeed: [], publicFeedFetchedAt: Date.now() });
+    return [];
+  }
+  const query = new URLSearchParams({ marketplaces: marketplaces.join(",") }).toString();
+  const feedPayload = `${FEED_PATH}?${query}`;
   const timeout = withTimeout();
   // Requête signée HMAC (même schéma que le feedback) : la signature porte
   // sur le path, pour éviter que l'URL du feed ne soit scrapable au curl.
   const instanceId = await getInstanceId();
-  const r = await authenticatedFetch(`${API_BASE}/api/public/invitations`, {
+  const r = await authenticatedFetch(`${API_BASE}${feedPayload}`, {
     signal: timeout.signal,
   }, {
-    payload: FEED_SIG_PAYLOAD,
+    payload: feedPayload,
     scope: "instance",
     instanceId,
   }).finally(timeout.done);
@@ -218,14 +240,14 @@ async function refreshPublicFeed() {
 async function notifyNewPublicFeedItems(previousFeed, nextFeed, { canNotify = true } = {}) {
   if (!canNotify || !Array.isArray(nextFeed) || nextFeed.length === 0) return;
 
-  const previousAsins = new Set(
+  const previousKeys = new Set(
     (previousFeed || [])
-      .map((item) => asinFromUrl(item?.url))
+      .map((item) => productKey(item?.url))
       .filter(Boolean),
   );
   const freshItems = nextFeed.filter((item) => {
-    const asin = asinFromUrl(item?.url);
-    return asin && !previousAsins.has(asin);
+    const key = productKey(item?.url);
+    return key && !previousKeys.has(key);
   });
   if (!freshItems.length) return;
 
@@ -259,7 +281,14 @@ async function clearPublicFeed() {
 }
 
 async function getWatchlist() {
-  const { publicFeed, customUrls, knownStates, publicFeedFetchedAt, knownImages, knownExpiry } =
+  const {
+    publicFeed,
+    customUrls,
+    knownStates,
+    publicFeedFetchedAt,
+    knownImages,
+    knownExpiry,
+  } =
     await chrome.storage.local.get([
       "publicFeed",
       "customUrls",
@@ -268,10 +297,11 @@ async function getWatchlist() {
       "knownImages",
       "knownExpiry",
     ]);
-  const { trackPokemonTcgFr } = await getSettings();
+  const settings = await getSettings();
   let feed = [];
-  if (trackPokemonTcgFr) {
-    feed = publicFeed || [];
+  const enabledMarketplaces = new Set(selectedMarketplaces(settings));
+  if (enabledMarketplaces.size) {
+    feed = (publicFeed || []).filter((item) => enabledMarketplaces.has(item.marketplace || marketplaceFromUrl(item.url)));
     // Refresh si stale ou jamais fetché
     if (!publicFeedFetchedAt || Date.now() - publicFeedFetchedAt > FEED_REFRESH_MS) {
       try { feed = await refreshPublicFeed(); }
@@ -282,24 +312,25 @@ async function getWatchlist() {
   const states = knownStates || {};
   const deduped = new Map();
   for (const item of feed) {
-    const asin = asinFromUrl(item.url);
-    deduped.set(asin || item.url, item);
+    const key = productKey(item.url);
+    deduped.set(key || item.url, item);
   }
   for (const item of custom) {
-    const asin = asinFromUrl(item.url);
+    const key = productKey(item.url);
     // Les ajouts manuels priment si l'ASIN existe déjà dans le feed.
-    deduped.set(asin || item.url, item);
+    deduped.set(key || item.url, item);
   }
   const all = [...deduped.values()];
   const images = knownImages || {};
   const expiry = knownExpiry || {};
   return all.map((it) => {
-    const asin = asinFromUrl(it.url);
+    const key = productKey(it.url);
     return {
       ...it,
-      known_state: states[asin] || null,
-      image_url: images[asin] || null,
-      expiry_info: expiry[asin] || null,
+      marketplace: it.marketplace || marketplaceFromUrl(it.url),
+      known_state: states[key] || null,
+      image_url: images[key] || null,
+      expiry_info: expiry[key] || null,
     };
   });
 }
@@ -307,7 +338,9 @@ async function getWatchlist() {
 async function updateActionBadge(items = null) {
   try {
     const watchlist = items || await getWatchlist();
-    const buyableCount = watchlist.filter((it) => it.known_state === "accepted").length;
+    const buyableCount = watchlist.filter(
+      (it) => it.known_state === "accepted",
+    ).length;
     await chrome.action.setBadgeBackgroundColor({ color: BUYABLE_BADGE_BG });
     await chrome.action.setBadgeText({ text: buyableCount > 0 ? String(Math.min(buyableCount, 99)) : "" });
     await chrome.action.setTitle({
@@ -321,10 +354,10 @@ async function updateActionBadge(items = null) {
 }
 
 async function setKnownState(url, state) {
-  const asin = asinFromUrl(url);
-  if (!asin) return;
+  const key = productKey(url);
+  if (!key) return;
   const { knownStates } = await chrome.storage.local.get("knownStates");
-  const next = { ...(knownStates || {}), [asin]: state };
+  const next = { ...(knownStates || {}), [key]: state };
   await chrome.storage.local.set({ knownStates: next });
 }
 
@@ -338,30 +371,30 @@ function extractExpiryTextFromHtml(html) {
 }
 
 async function setKnownExpiry(url, expiryText) {
-  const asin = asinFromUrl(url);
-  if (!asin) return;
+  const key = productKey(url);
+  if (!key) return;
   const { knownExpiry } = await chrome.storage.local.get("knownExpiry");
   const next = { ...(knownExpiry || {}) };
   if (expiryText) {
-    next[asin] = { text: expiryText, checkedAt: Date.now() };
+    next[key] = { text: expiryText, checkedAt: Date.now() };
   } else {
-    delete next[asin];
+    delete next[key];
   }
   await chrome.storage.local.set({ knownExpiry: next });
 }
 
 async function getLastStateCheckAt(url) {
-  const asin = asinFromUrl(url);
-  if (!asin) return 0;
+  const key = productKey(url);
+  if (!key) return 0;
   const { stateCheckedAt } = await chrome.storage.local.get("stateCheckedAt");
-  return stateCheckedAt?.[asin] || 0;
+  return stateCheckedAt?.[key] || 0;
 }
 
 async function markStateChecked(url) {
-  const asin = asinFromUrl(url);
-  if (!asin) return;
+  const key = productKey(url);
+  if (!key) return;
   const { stateCheckedAt } = await chrome.storage.local.get("stateCheckedAt");
-  const next = { ...(stateCheckedAt || {}), [asin]: Date.now() };
+  const next = { ...(stateCheckedAt || {}), [key]: Date.now() };
   await chrome.storage.local.set({ stateCheckedAt: next });
 }
 
@@ -379,14 +412,15 @@ function normalizeAmazonProductUrl(url) {
   } catch {
     throw new Error("URL invalide.");
   }
-  if (!/(^|\.)amazon\./i.test(parsed.hostname)) {
-    throw new Error("Le lien doit pointer vers un produit Amazon.");
+  const marketplace = normalizeAmazonHostname(parsed.hostname);
+  if (!marketplace) {
+    throw new Error("Le lien doit pointer vers Amazon France.");
   }
   const asin = asinFromUrl(parsed.href);
   if (!asin) {
     throw new Error("URL invalide : format /dp/ASIN ou /gp/product/ASIN attendu.");
   }
-  return `${parsed.origin}/dp/${asin}`;
+  return `${MARKETPLACES[marketplace].origin}/dp/${asin}`;
 }
 
 function shortPath(url) {
@@ -449,14 +483,14 @@ function extractProductPriceFromHtml(html) {
 }
 
 async function storeKnownImage(url, html) {
-  const asin = asinFromUrl(url);
-  if (!asin) return;
+  const key = productKey(url);
+  if (!key) return;
   const { knownImages } = await chrome.storage.local.get("knownImages");
   const images = knownImages || {};
-  if (images[asin]) return; // déjà en cache
+  if (images[key]) return; // déjà en cache
   const imageUrl = extractProductImageFromHtml(html);
   if (!imageUrl) return;
-  images[asin] = imageUrl;
+  images[key] = imageUrl;
   await chrome.storage.local.set({ knownImages: images });
 }
 
@@ -475,7 +509,8 @@ function extractProductNameFromHtml(html) {
 
 function productNotificationId(kind, url) {
   const asin = asinFromUrl(url) || "unknown";
-  return `product-${kind}-${asin}-${Date.now()}`;
+  const marketplace = marketplaceFromUrl(url) || "amazon";
+  return `product-${kind}-${marketplace}-${asin}-${Date.now()}`;
 }
 
 async function rememberNotificationUrl(notificationId, url) {
@@ -547,12 +582,17 @@ async function playAlertSound(kind) {
 // ─────────────────────────────────────────────────────────────────────────
 // Feedback anonyme vers notre backend (opt-in)
 // ─────────────────────────────────────────────────────────────────────────
-async function sendFeedback(asin, state, source = "bg_check") {
+async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeSource) {
+  const calledWithUrl = String(urlOrMarketplace || "").startsWith("http");
+  const marketplace = calledWithUrl ? marketplaceFromUrl(urlOrMarketplace) : normalizeAmazonHostname(urlOrMarketplace);
+  const asin = calledWithUrl ? asinFromUrl(urlOrMarketplace) : asinOrState;
+  const state = calledWithUrl ? asinOrState : stateOrSource;
+  const source = calledWithUrl ? (stateOrSource || "bg_check") : (maybeSource || "bg_check");
   const { communityDataEnabled } = await getSettings();
-  if (!communityDataEnabled || !asin) return;
+  if (!communityDataEnabled || !asin || !marketplace) return;
   try {
     const instanceId = await getInstanceId();
-    const body = JSON.stringify({ asin, state, source, observedAt: Math.floor(Date.now() / 1000) });
+    const body = JSON.stringify({ marketplace, asin, state, source, observedAt: Math.floor(Date.now() / 1000) });
     await authenticatedFetch(`${API_BASE}/api/extension/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -568,23 +608,27 @@ async function sendFeedback(asin, state, source = "bg_check") {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Scraping passif (opt-in) — délégué par les content scripts
+// Observations produit (opt-in) — content scripts et monitoring automatique
 // ─────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────
 // Historique de prix local — stocké dans chrome.storage.local uniquement
 // ─────────────────────────────────────────────────────────────────────────
-async function recordPrice(asin, price) {
-  if (!asin || price == null) return;
+async function recordPrice(urlOrMarketplace, asinOrPrice, maybePrice) {
+  const calledWithUrl = String(urlOrMarketplace || "").startsWith("http");
+  const key = calledWithUrl ? productKey(urlOrMarketplace) : productKey(urlOrMarketplace, asinOrPrice);
+  const price = calledWithUrl ? asinOrPrice : maybePrice;
+  if (!key || price == null) return;
   const { priceHistory } = await chrome.storage.local.get("priceHistory");
   const history = priceHistory || {};
-  history[asin] = { price, ts: Date.now() };
+  history[key] = { price, ts: Date.now() };
   await chrome.storage.local.set({ priceHistory: history });
 }
 
-async function getPrice(asin) {
-  if (!asin) return null;
+async function getPrice(marketplace, asin) {
+  const key = productKey(marketplace, asin);
+  if (!key) return null;
   const { priceHistory } = await chrome.storage.local.get("priceHistory");
-  return priceHistory?.[asin] ?? null;
+  return priceHistory?.[key] ?? null;
 }
 
 async function forwardScrape(items) {
@@ -593,7 +637,8 @@ async function forwardScrape(items) {
   // Enregistrer les prix localement, indépendamment du partage anonyme
   for (const it of items || []) {
     const asin = ((it.external_id || it.asin || "")).toUpperCase();
-    if (asin && it.price != null) await recordPrice(asin, it.price);
+    const marketplace = normalizeAmazonHostname(it.marketplace) || marketplaceFromUrl(it.url || it.source_url);
+    if (marketplace && asin && it.price != null) await recordPrice(marketplace, asin, it.price);
   }
 
   if (!communityDataEnabled || !items?.length) return { skipped: true };
@@ -602,7 +647,7 @@ async function forwardScrape(items) {
     // juste un dayBucket hashé pour rate-limit serveur.
     const dayBucket = new Date().toISOString().slice(0, 10);
     const body = JSON.stringify({ items, dayBucket });
-    await authenticatedFetch(`${API_BASE}/api/extension/observations`, {
+    const response = await authenticatedFetch(`${API_BASE}/api/extension/observations`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
@@ -610,6 +655,7 @@ async function forwardScrape(items) {
       payload: body,
       scope: "observations",
     });
+    if (!response.ok) throw new Error(`observations HTTP ${response.status}`);
     return { sent: items.length };
   } catch (e) {
     console.warn("[amzinvite] scrape forward failed:", e);
@@ -621,7 +667,7 @@ async function forwardScrape(items) {
 // Auto-request d'invitation — POST direct à Amazon (opt-in)
 // Voir docs/ARCHITECTURE.md pour le reverse-engineering complet
 // ─────────────────────────────────────────────────────────────────────────
-function extractInvitationCreds(html) {
+function extractInvitationCreds(html, marketplace) {
   if (!html) return null;
   const tokenMatch = html.match(/value="([^"]+)"\s+id="hdp-ib-csrf-token"/i)
     || html.match(/id="hdp-ib-csrf-token"\s+[^>]*value="([^"]+)"/i);
@@ -639,7 +685,10 @@ function extractInvitationCreds(html) {
     const m = html.match(re);
     if (m) { slateToken = m[1]; break; }
   }
-  return { token: tokenMatch[1], endpoint, slateToken };
+  try {
+    if (new URL(endpoint).hostname !== MARKETPLACES[marketplace]?.dataHost) return null;
+  } catch { return null; }
+  return { token: tokenMatch[1], endpoint, slateToken, marketplace };
 }
 
 async function requestInvitationDirect(creds) {
@@ -647,7 +696,7 @@ async function requestInvitationDirect(creds) {
     "x-api-csrf-token": creds.token,
     "Content-Type": 'application/vnd.com.amazon.api+json; type="aapi.highdemandproductcontracts.request-invite.request/v1"',
     "Accept": 'application/vnd.com.amazon.api+json; type="aapi.highdemandproductcontracts.request-invite/v1"',
-    "Accept-Language": "fr-FR",
+    "Accept-Language": MARKETPLACES[creds.marketplace]?.locale || "fr-FR",
     "priority": "u=1, i",
   };
   if (creds.slateToken) headers["x-amzn-encrypted-slate-token"] = creds.slateToken;
@@ -689,12 +738,14 @@ function withTimeout(ms = REQUEST_TIMEOUT_MS) {
 }
 
 async function fetchAmazonPage(url) {
+  const marketplace = marketplaceFromUrl(url);
+  if (!marketplace) throw new Error("Marketplace Amazon non supportée");
   const timeout = withTimeout();
   const r = await fetch(url, {
     credentials: "include",
     redirect: "follow",
     signal: timeout.signal,
-    headers: { "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.6" },
+    headers: { "Accept-Language": `${MARKETPLACES[marketplace].locale},fr;q=0.9,en;q=0.6` },
   }).finally(timeout.done);
   if (!r.ok) throw new Error(`amazon HTTP ${r.status}`);
   return r.text();
@@ -715,7 +766,7 @@ async function scheduleAlarm() {
   }
   const { intervalMin } = await getSettings();
   const jitter = 1 + (Math.random() * 0.4 - 0.2);
-  const period = Math.max(5, Math.round(intervalMin * jitter));
+  const period = Math.max(MIN_INTERVAL_MIN, Math.round(intervalMin * jitter));
   await chrome.alarms.clear(ALARM_NAME);
   await chrome.alarms.create(ALARM_NAME, { periodInMinutes: period });
 }
@@ -734,38 +785,91 @@ function stopKeepalive() {
 // ─────────────────────────────────────────────────────────────────────────
 // DNR : réécriture des headers Origin/sec-fetch-* pour les POST à data.amazon
 // ─────────────────────────────────────────────────────────────────────────
-const DNR_RULE_ID = 1001;
+const DNR_RULE_IDS = [1001, 1002];
 async function setupOriginRewrite() {
   try {
     await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: [DNR_RULE_ID],
-      addRules: [{
-        id: DNR_RULE_ID,
+      removeRuleIds: DNR_RULE_IDS,
+      addRules: SUPPORTED_MARKETPLACES.map((marketplace, index) => ({
+        id: DNR_RULE_IDS[index],
         priority: 1,
         action: {
           type: "modifyHeaders",
           requestHeaders: [
-            { header: "origin", operation: "set", value: "https://www.amazon.fr" },
+            { header: "origin", operation: "set", value: MARKETPLACES[marketplace].origin },
             { header: "sec-fetch-site", operation: "set", value: "same-site" },
             { header: "sec-fetch-mode", operation: "set", value: "cors" },
             { header: "sec-fetch-dest", operation: "set", value: "empty" },
-            { header: "referer", operation: "set", value: "https://www.amazon.fr/" },
+            { header: "referer", operation: "set", value: `${MARKETPLACES[marketplace].origin}/` },
           ],
         },
         condition: {
-          urlFilter: "||data.amazon.fr/custom/highdemandproductcontracts/",
+          urlFilter: `||${MARKETPLACES[marketplace].dataHost}/custom/highdemandproductcontracts/`,
           resourceTypes: ["xmlhttprequest"],
         },
-      }],
+      })),
     });
   } catch (e) {
     console.warn("[amzinvite] DNR rule install failed:", e);
   }
 }
 
+async function migrateMarketplaceStorage() {
+  const { marketplaceStorageVersion, knownStates, knownImages, knownExpiry, stateCheckedAt, priceHistory, intervalMin } =
+    await chrome.storage.local.get([
+      "marketplaceStorageVersion", "knownStates", "knownImages", "knownExpiry", "stateCheckedAt", "priceHistory", "intervalMin",
+    ]);
+  const patch = {};
+  if (Number(intervalMin) > 0 && Number(intervalMin) < MIN_INTERVAL_MIN) {
+    patch.intervalMin = MIN_INTERVAL_MIN;
+  }
+  if (marketplaceStorageVersion < 2) {
+    patch.marketplaceStorageVersion = 2;
+    for (const [name, values] of Object.entries({ knownStates, knownImages, knownExpiry, stateCheckedAt, priceHistory })) {
+      const migrated = {};
+      for (const [key, value] of Object.entries(values || {})) {
+        migrated[key.includes(":") ? key : `amazon.fr:${key.toUpperCase()}`] = value;
+      }
+      patch[name] = migrated;
+    }
+  }
+  if (Object.keys(patch).length) await chrome.storage.local.set(patch);
+}
+
+async function checkMarketplaceAuth(marketplace) {
+  const config = MARKETPLACES[marketplace];
+  if (!config) return "unknown";
+  const timeout = withTimeout(12_000);
+  try {
+    const response = await fetch(`${config.origin}/gp/css/homepage.html`, {
+      credentials: "include",
+      redirect: "follow",
+      signal: timeout.signal,
+      headers: { "Accept-Language": config.locale },
+    });
+    const finalUrl = response.url || "";
+    if (/\/ap\/signin/i.test(finalUrl)) return "disconnected";
+    if (!response.ok) return "unknown";
+    const html = await response.text();
+    if (/captcha|api-services-support@amazon/i.test(html)) return "unknown";
+    // Une page compte authentifiée contient encore un lien /ap/signin pour
+    // « Utiliser un compte différent ». Les marqueurs positifs doivent donc
+    // primer sur ce lien secondaire ; seule la redirection finale est une
+    // preuve forte de déconnexion.
+    if (/nav-link-accountList|Votre compte|Your Account/i.test(html)) return "connected";
+    if (/\/ap\/signin|Identifiez-vous|Sign in/i.test(html)) return "disconnected";
+    return "unknown";
+  } catch (_) {
+    return "unknown";
+  } finally {
+    timeout.done();
+  }
+}
+
 chrome.runtime.onInstalled.addListener(async (details) => {
-  scheduleAlarm();
-  setupOriginRewrite();
+  await migrateMarketplaceStorage();
+  void scheduleAlarm();
+  void setupOriginRewrite();
 
   const existing = await chrome.storage.local.get([
     "intervalMin",
@@ -800,12 +904,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 chrome.runtime.onStartup.addListener(() => {
+  void migrateMarketplaceStorage();
   scheduleAlarm();
   setupOriginRewrite();
   updateActionBadge();
 });
 setupOriginRewrite();
-updateActionBadge();
+void migrateMarketplaceStorage().then(() => updateActionBadge());
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) runCheck();
@@ -838,9 +943,10 @@ chrome.notifications.onClosed?.addListener((notificationId) => {
 // ─────────────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "check-amazon-auth") {
-    chrome.cookies.get({ url: "https://www.amazon.fr", name: "at-acbfr" })
-      .then((cookie) => sendResponse({ ok: true, connected: !!cookie }))
-      .catch(() => sendResponse({ ok: true, connected: null }));
+    const requested = Array.isArray(msg.marketplaces) ? msg.marketplaces : [marketplaceFromUrl(sender?.url) || "amazon.fr"];
+    Promise.all(requested.filter((key) => MARKETPLACES[key]).map(async (key) => [key, await checkMarketplaceAuth(key)]))
+      .then((entries) => sendResponse({ ok: true, statuses: Object.fromEntries(entries) }))
+      .catch(() => sendResponse({ ok: true, statuses: {} }));
     return true;
   }
   if (msg?.type === "check-single") {
@@ -853,13 +959,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         storeKnownImage(normalizedUrl, html).catch(() => {});
         const _asinSingle = asinFromUrl(normalizedUrl);
         const _priceSingle = extractProductPriceFromHtml(html);
-        if (_asinSingle && _priceSingle != null) recordPrice(_asinSingle, _priceSingle).catch(() => {});
+        if (_asinSingle && _priceSingle != null) recordPrice(normalizedUrl, _priceSingle).catch(() => {});
         const { text, doc, rawHtml } = extractBuyboxText(html);
         const state = detectInvitationState(text, doc, rawHtml);
         await setKnownState(normalizedUrl, state);
         await setKnownExpiry(normalizedUrl, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
         await markStateChecked(normalizedUrl);
-        await sendFeedback(asinFromUrl(normalizedUrl), state, "bg_check");
+        await sendFeedback(normalizedUrl, state, "bg_check");
         await updateActionBadge();
         sendResponse({ ok: true, url: normalizedUrl, state });
       } catch (e) {
@@ -916,7 +1022,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await Promise.all([
           setKnownState(msg.url, msg.state),
           setKnownExpiry(msg.url, msg.state === "accepted" ? (msg.expiryText || null) : null),
-          sendFeedback(asin, msg.state, "manual_visit"),
+          sendFeedback(msg.url, msg.state, "manual_visit"),
         ]);
       } catch (e) {
         console.warn("[amzinvite] manual visit report failed:", e);
@@ -937,11 +1043,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "get-watchlist") {
-    getWatchlist().then((items) => sendResponse({ ok: true, items })).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    getWatchlist()
+      .then((items) => sendResponse({
+        ok: true,
+        items,
+      }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "get-price") {
-    getPrice(msg.asin).then((entry) => sendResponse({ ok: true, entry })).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    getPrice(msg.marketplace, msg.asin).then((entry) => sendResponse({ ok: true, entry })).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "export-data") {
@@ -978,13 +1089,13 @@ async function validateInvitationProductUrl(url) {
 
 async function addCustomUrl(url) {
   const { normalizedUrl, state, name } = await validateInvitationProductUrl(url);
-  const asin = asinFromUrl(normalizedUrl);
+  const key = productKey(normalizedUrl);
   const { customUrls, publicFeed } = await chrome.storage.local.get(["customUrls", "publicFeed"]);
   const normalizedCustom = (customUrls || []).map((entry) => normalizeCustomEntry(entry));
   if (normalizedCustom.some((entry) => entry.url === normalizedUrl)) {
     return { url: normalizedUrl, state, added: false, reason: "already_custom" };
   }
-  const alreadyInFeed = (publicFeed || []).some((item) => asinFromUrl(item.url) === asin);
+  const alreadyInFeed = (publicFeed || []).some((item) => productKey(item.url) === key);
   if (alreadyInFeed) {
     return { url: normalizedUrl, state, added: false, reason: "already_feed" };
   }
@@ -1007,7 +1118,7 @@ async function removeCustomUrl(url) {
 // ─────────────────────────────────────────────────────────────────────────
 // Export / import — sauvegarde locale de la watchlist et des réglages
 // ─────────────────────────────────────────────────────────────────────────
-const EXPORT_VERSION = 1;
+const EXPORT_VERSION = 2;
 
 async function exportData() {
   const settings = await getSettings();
@@ -1032,16 +1143,16 @@ async function importData(data) {
     throw new Error("Fichier de sauvegarde invalide.");
   }
   // Fusion des URLs custom (pas de re-validation réseau : on fait confiance
-  // au fichier exporté). Dédoublonnage par ASIN.
+  // au fichier exporté). Dédoublonnage par marketplace + ASIN.
   const { customUrls } = await chrome.storage.local.get("customUrls");
   const existing = (customUrls || []).map((entry) => normalizeCustomEntry(entry));
-  const seen = new Set(existing.map((e) => asinFromUrl(e.url)).filter(Boolean));
+  const seen = new Set(existing.map((e) => productKey(e.url)).filter(Boolean));
   let added = 0;
   for (const raw of data.customUrls) {
     const entry = normalizeCustomEntry(raw);
-    const asin = asinFromUrl(entry.url);
-    if (!entry.url || (asin && seen.has(asin))) continue;
-    if (asin) seen.add(asin);
+    const key = productKey(entry.url);
+    if (!entry.url || (key && seen.has(key))) continue;
+    if (key) seen.add(key);
     existing.push(entry);
     added++;
   }
@@ -1049,7 +1160,7 @@ async function importData(data) {
   // Réglages : appliqués seulement s'ils sont présents dans le fichier.
   const s = data.settings;
   if (s && typeof s === "object") {
-    if (Number.isFinite(s.intervalMin)) patch.intervalMin = Math.max(5, s.intervalMin);
+    if (Number.isFinite(s.intervalMin)) patch.intervalMin = Math.max(MIN_INTERVAL_MIN, s.intervalMin);
     if (typeof s.autoRequest === "boolean") patch.autoRequest = s.autoRequest;
     if (typeof s.communityDataEnabled === "boolean") patch.communityDataEnabled = s.communityDataEnabled;
     if (typeof s.trackPokemonTcgFr === "boolean") patch.trackPokemonTcgFr = s.trackPokemonTcgFr;
@@ -1136,61 +1247,67 @@ async function runCheckOnce({ force = false } = {}) {
       storeKnownImage(it.url, html).catch(() => {});
       const asinKey = asinFromUrl(it.url);
       const scrapedPrice = extractProductPriceFromHtml(html);
-      if (asinKey && scrapedPrice != null) recordPrice(asinKey, scrapedPrice).catch(() => {});
+      if (asinKey && scrapedPrice != null) recordPrice(it.url, scrapedPrice).catch(() => {});
       const { text, doc, rawHtml } = extractBuyboxText(html);
-      const state = detectInvitationState(text, doc, rawHtml);
-      const asin = asinFromUrl(it.url);
-      const prevState = it.known_state || null;
-      await setKnownState(it.url, state);
-      await setKnownExpiry(it.url, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
-      await markStateChecked(it.url);
-      await sendFeedback(asin, state, "bg_check");
-      summary.checked++;
-      summary.items.push({ url: it.url, state });
+        const state = detectInvitationState(text, doc, rawHtml);
+        const asin = asinFromUrl(it.url);
+        const prevState = it.known_state || null;
+        await setKnownState(it.url, state);
+        await setKnownExpiry(it.url, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
+        await markStateChecked(it.url);
+        await sendFeedback(it.url, state, "bg_check");
+        summary.checked++;
+        summary.items.push({ url: it.url, state });
 
-      // Auto-request si available + opt-in + cooldown OK
-      if (state === "available" && (await shouldAutoSpawn(it.url))) {
-        const creds = extractInvitationCreds(html);
-        if (creds) {
-          await markAutoSpawned(it.url);
-          try {
-            const result = await requestInvitationDirect(creds);
-            if (result.ok) {
-              await setKnownState(it.url, "already_requested");
-              await sendFeedback(asin, "already_requested", "auto_request");
-              summary.items[summary.items.length - 1].autoSuccess = true;
-              summary.items[summary.items.length - 1].state = "already_requested";
-              await createProductNotification("auto_request", {
-                url: it.url,
-                title: "🤖 Invitation demandée automatiquement",
-                message: it.name || asin,
-                priority: 2,
-              });
+        // Auto-request si available + opt-in + cooldown OK
+        if (state === "available" && (await shouldAutoSpawn(it.url))) {
+          const marketplace = marketplaceFromUrl(it.url);
+          const creds = extractInvitationCreds(html, marketplace);
+          if (creds) {
+            try {
+              const result = await requestInvitationDirect(creds);
+              if (result.ok) {
+                await markAutoSpawned(it.url);
+                await setKnownState(it.url, "already_requested");
+                await sendFeedback(it.url, "already_requested", "auto_request");
+                summary.items[summary.items.length - 1].autoSuccess = true;
+                summary.items[summary.items.length - 1].state = "already_requested";
+                await createProductNotification("auto_request", {
+                  url: it.url,
+                  title: "🤖 Invitation demandée automatiquement",
+                  message: it.name || asin,
+                  priority: 2,
+                });
+              } else {
+                summary.items[summary.items.length - 1].autoError = `amazon HTTP ${result.status}`;
+              }
+            } catch (e) {
+              console.warn("[amzinvite] auto-request failed:", e);
+              summary.items[summary.items.length - 1].autoError = String(e);
             }
-          } catch (e) {
-            console.warn("[amzinvite] auto-request failed:", e);
+          } else {
+            summary.items[summary.items.length - 1].autoError = "invitation_credentials_missing";
           }
         }
-      }
 
-      // Notif seulement lors des transitions actionnables pour eviter le spam.
-      if (state === "accepted" && prevState !== "accepted") {
-        await createProductNotification("accepted", {
-          url: it.url,
-          title: "🎉 Tu es sélectionné !",
-          message: `${it.name || asin} — clique pour acheter (72h max)`,
-          priority: 2,
-        });
-        await playAlertSound("accepted");
-      } else if (state === "available" && prevState !== "available") {
-        await createProductNotification("available", {
-          url: it.url,
-          title: "🎟️ Invitation dispo",
-          message: it.name || asin,
-          priority: 1,
-        });
-        await playAlertSound("available");
-      }
+        // Notif seulement lors des transitions actionnables pour eviter le spam.
+        if (state === "accepted" && prevState !== "accepted") {
+          await createProductNotification("accepted", {
+            url: it.url,
+            title: "🎉 Tu es sélectionné !",
+            message: `${it.name || asin} — clique pour acheter (72h max)`,
+            priority: 2,
+          });
+          await playAlertSound("accepted");
+        } else if (state === "available" && prevState !== "available") {
+          await createProductNotification("available", {
+            url: it.url,
+            title: "🎟️ Invitation dispo",
+            message: it.name || asin,
+            priority: 1,
+          });
+          await playAlertSound("available");
+        }
     } catch (e) {
       summary.errors++;
       summary.items.push({ url: it.url, error: String(e) });

@@ -6,7 +6,8 @@
     try {
       const url = new URL(rawUrl);
       const host = url.hostname.toLowerCase();
-      if (host !== "amazon.fr" && !host.endsWith(".amazon.fr")) return null;
+      const supported = host === "amazon.fr" || host.endsWith(".amazon.fr");
+      if (!supported) return null;
       const match = url.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/i);
       return match ? match[1].toUpperCase() : null;
     } catch {

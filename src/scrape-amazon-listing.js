@@ -72,6 +72,7 @@ console.log("[amzinvite] listing script loaded on", location.href);
 
     return {
       site: "amazon",
+      marketplace: new URL(location.href).hostname.replace(/^www\./, "").toLowerCase(),
       url: `${location.origin}/dp/${asin}`,
       external_id: asin.toUpperCase(),
       name,

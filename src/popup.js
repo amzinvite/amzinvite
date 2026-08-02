@@ -85,6 +85,10 @@ function shortPath(url) {
   return asin ? `/dp/${asin}` : url;
 }
 
+function marketplaceFromItem(item) {
+  return "FR";
+}
+
 function isNewFeedItem(item) {
   const firstSeenMs = Number(item?.first_seen || 0) * 1000;
   return !!firstSeenMs && Date.now() - firstSeenMs <= NEW_FEED_ITEM_MS;
@@ -136,15 +140,30 @@ async function renderPokemonFeedDate() {
 async function renderAmazonStatus() {
   const el = $("amazon-status");
   const warn = $("amazon-warn");
+  const panel = $("amazon-status-panel");
   try {
-    const cookie = await chrome.cookies.get({ url: "https://www.amazon.fr", name: "at-acbfr" });
-    if (cookie) {
-      if (el) { el.textContent = "● Connecté Amazon"; el.className = "eyebrow connected"; }
-      if (warn) warn.hidden = true;
+    const cfg = await chrome.storage.local.get(["trackPokemonTcgFr"]);
+    const active = [];
+    if (cfg.trackPokemonTcgFr !== false) active.push("amazon.fr");
+    const res = await sendMessage({ type: "check-amazon-auth", marketplaces: active });
+    const statuses = res?.statuses || {};
+    const meta = { "amazon.fr": ["FR", "https://www.amazon.fr/gp/sign-in.html"] };
+    const symbol = (status) => status === "connected" ? "●" : status === "disconnected" ? "○" : "?";
+    const label = (status) => status === "connected" ? "Connecté" : status === "disconnected" ? "Non connecté" : "À vérifier";
+    if (active.length === 0) {
+      el.textContent = "○ Suivi désactivé";
+    } else if (active.length === 1) {
+      const key = active[0];
+      el.textContent = `${symbol(statuses[key])} ${label(statuses[key])} ${meta[key][0]}`;
     } else {
-      if (el) { el.textContent = "● Non connecté"; el.className = "eyebrow disconnected"; }
-      if (warn) warn.hidden = false;
+      el.textContent = active.map((key) => `${symbol(statuses[key])} ${meta[key][0]}`).join(" · ");
     }
+    const values = active.map((key) => statuses[key]);
+    el.className = `eyebrow ${active.length === 0 || values.some((v) => v === "unknown") ? "" : values.every((v) => v === "connected") ? "connected" : "disconnected"}`;
+    panel.innerHTML = active.map((key) => `<div class="amazon-status-row"><span>${symbol(statuses[key])} Amazon ${meta[key][0]} · ${label(statuses[key])}</span>${statuses[key] === "connected" ? "" : `<a href="${meta[key][1]}" target="_blank" rel="noopener">Se connecter</a>`}</div>`).join("");
+    const disconnected = active.filter((key) => statuses[key] === "disconnected");
+    warn.hidden = disconnected.length === 0;
+    $("amazon-warn-links").innerHTML = disconnected.map((key) => `<a href="${meta[key][1]}" target="_blank" rel="noopener">Amazon ${meta[key][0]} →</a>`).join(" · ");
   } catch {
     if (el) { el.textContent = "● Amazon"; el.className = "eyebrow"; }
     if (warn) warn.hidden = true;
@@ -203,7 +222,7 @@ async function applyViewMode(compact) {
 
 async function persistSettings({ reschedule = false } = {}) {
   await chrome.storage.local.set({
-    intervalMin: Math.max(5, parseInt($("intervalMin").value || "30", 10)),
+    intervalMin: Math.max(30, parseInt($("intervalMin").value || "30", 10)),
     autoRequest: $("autoRequest").checked,
     communityDataEnabled: $("communityDataEnabled").checked,
     trackPokemonTcgFr: $("trackPokemonTcgFr").checked,
@@ -235,7 +254,7 @@ async function load() {
   ]);
 
   $("version").textContent = `Version ${manifest?.version || "?"}`;
-  setVal("intervalMin", cfg.intervalMin || 30);
+  setVal("intervalMin", Math.max(30, Number(cfg.intervalMin) || 30));
   setChecked("autoRequest", cfg.autoRequest);
   setChecked(
     "communityDataEnabled",
@@ -612,10 +631,10 @@ function renderList(items, showAll) {
       ${imgTag}
       <div class="body">
         <div class="name-row">
-          ${newTag}
+          ${newTag}<span class="marketplace-badge">${marketplaceFromItem(item)}</span>
           <div class="name" title="${escapeAttr(item.name || asin || item.url)}">${escapeHTML(item.name || asin || item.url)}</div>
         </div>
-        <span class="price-tag" data-asin="${escapeAttr(asin || "")}"></span>
+        <span class="price-tag" data-asin="${escapeAttr(asin || "")}" data-marketplace="${escapeAttr(item.marketplace || new URL(item.url).hostname.replace(/^www\./, ""))}"></span>
         <div class="product-links">
           <span class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asin || shortPath(item.url))}</a></span>
           ${prixtcgTag}
@@ -634,8 +653,9 @@ function renderList(items, showAll) {
   // Remplir les prix de façon asynchrone
   list.querySelectorAll(".price-tag[data-asin]").forEach(async (el) => {
     const asin = el.dataset.asin;
+    const marketplace = el.dataset.marketplace;
     if (!asin) return;
-    const res = await sendMessage({ type: "get-price", asin });
+    const res = await sendMessage({ type: "get-price", marketplace, asin });
     if (res?.entry?.price != null) {
       el.textContent = `${Number(res.entry.price).toFixed(2)} €`;
     }
@@ -695,13 +715,28 @@ $("toggle-settings").addEventListener("click", () => {
   $("settings").classList.toggle("open");
 });
 
+$("amazon-status").addEventListener("click", () => {
+  $("amazon-status-panel").classList.toggle("open");
+});
+
 $("toggle-hidden").addEventListener("click", async () => {
   const next = !((await chrome.storage.local.get("showAll")).showAll);
   await chrome.storage.local.set({ showAll: next });
   await rerenderCurrentList(next);
 });
 
+$("intervalMin").addEventListener("input", () => {
+  const invalid = Number($("intervalMin").value) < 30;
+  $("intervalMin").setAttribute("aria-invalid", String(invalid));
+  $("intervalMinError").classList.toggle("visible", invalid);
+});
+
 $("intervalMin").addEventListener("change", async () => {
+  if (Number($("intervalMin").value) < 30) {
+    $("intervalMin").value = "30";
+    $("intervalMin").setAttribute("aria-invalid", "false");
+    $("intervalMinError").classList.add("visible");
+  }
   await persistSettings({ reschedule: true });
 });
 
@@ -731,18 +766,17 @@ $("communityDataEnabled").addEventListener("change", async () => {
   await persistSettings();
 });
 
-$("trackPokemonTcgFr").addEventListener("change", async () => {
+async function handleMarketplaceToggle() {
   await persistSettings();
   activeFilter = "all";
   await chrome.storage.local.set({ showAll: true });
-  if ($("trackPokemonTcgFr").checked) {
-    await sendMessage({ type: "refresh-public-feed" });
-  } else {
-    await sendMessage({ type: "clear-public-feed" });
-  }
+  await sendMessage({ type: "refresh-public-feed" });
   await renderPokemonFeedDate();
+  await renderAmazonStatus();
   await refreshList();
-});
+}
+
+$("trackPokemonTcgFr").addEventListener("change", handleMarketplaceToggle);
 
 $("addBtn").addEventListener("click", async () => {
   const url = $("addUrl").value.trim();

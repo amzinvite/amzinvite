@@ -35,6 +35,8 @@
       body {
         margin: 0;
         width: 392px;
+        height: 600px;
+        overflow: hidden;
         background: var(--bg);
         color: var(--text);
         font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
@@ -42,9 +44,13 @@
       }
       a { color: inherit; }
       .shell {
-        padding: 16px;
+        height: 100%;
+        padding: 8px;
       }
       .panel {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
         overflow: hidden;
         border: 1px solid var(--border);
         border-radius: 24px;
@@ -52,7 +58,8 @@
         box-shadow: var(--shadow-sm);
       }
       .hero {
-        padding: 18px 18px 16px;
+        flex: 0 0 auto;
+        padding: 10px 12px 8px;
         background: var(--surface-strong);
         border-bottom: 1px solid var(--border);
       }
@@ -68,8 +75,8 @@
         gap: 10px;
       }
       .brand-mark {
-        width: 34px;
-        height: 34px;
+        width: 28px;
+        height: 28px;
         display: block;
         border-radius: 12px;
         object-fit: cover;
@@ -101,31 +108,34 @@
       }
       h1 {
         margin: 0;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 800;
         letter-spacing: -0.02em;
       }
       .sub {
-        margin-top: 10px;
-        font-size: 12.5px;
+        margin-top: 4px;
+        overflow: hidden;
         color: var(--text-soft);
-        max-width: 270px;
+        font-size: 11px;
+        line-height: 1.3;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .meta {
-        margin-top: 4px;
-        font-size: 10.5px;
+        margin-top: 1px;
+        font-size: 9px;
         color: var(--muted);
         font-variant-numeric: tabular-nums;
       }
       .stats {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        padding: 14px 16px 0;
+        gap: 6px;
+        padding: 8px 12px 0;
       }
       .stat {
-        padding: 12px 10px;
-        border-radius: 16px;
+        padding: 7px 9px;
+        border-radius: 12px;
         border: 1px solid var(--border);
         background: var(--surface-strong);
         text-align: left;
@@ -139,15 +149,15 @@
       }
       .stat .n {
         display: block;
-        font-size: 21px;
+        font-size: 17px;
         line-height: 1;
         font-weight: 800;
         letter-spacing: -0.03em;
       }
       .stat .l {
         display: block;
-        margin-top: 6px;
-        font-size: 10.5px;
+        margin-top: 3px;
+        font-size: 9px;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.07em;
@@ -156,18 +166,18 @@
       .stat.warn .n { color: var(--brand); }
       .stat.info .n { color: var(--blue); }
       .status-wrap {
-        padding: 14px 16px 0;
+        padding: 8px 12px 0;
       }
       .status-line {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 11px 13px;
-        border-radius: 14px;
+        padding: 7px 10px;
+        border-radius: 11px;
         border: 1px solid var(--border);
         background: var(--surface-strong);
         color: var(--text-soft);
-        font-size: 11.5px;
+        font-size: 10.5px;
       }
       .status-line::before {
         content: "";
@@ -181,7 +191,7 @@
         display: grid;
         grid-template-columns: 1fr auto auto;
         gap: 8px;
-        padding: 14px 16px 0;
+        padding: 8px 12px 10px;
       }
       .auto-request-prompt {
         display: grid;
@@ -245,7 +255,7 @@
         transform: none;
       }
       .primary {
-        min-height: 46px;
+        min-height: 38px;
         padding: 0 16px;
         border-color: var(--brand);
         background: linear-gradient(180deg, var(--brand), var(--brand-strong));
@@ -253,8 +263,8 @@
         font-weight: 700;
       }
       .ghost {
-        width: 46px;
-        height: 46px;
+        width: 38px;
+        height: 38px;
         padding: 0;
         font-size: 16px;
       }
@@ -358,19 +368,46 @@
         line-height: 1.45;
       }
       .amazon-warn {
-        margin: 0 0 10px;
+        margin: 10px 16px;
         padding: 10px 12px;
         border-radius: 12px;
         background: var(--amber-bg);
         color: var(--amber);
         font-size: 11.5px;
         line-height: 1.5;
+        overflow-wrap: anywhere;
       }
       .amazon-warn a {
         color: var(--amber);
         font-weight: 700;
         text-decoration: underline;
       }
+      .field-error {
+        display: none;
+        margin: 7px 0 0;
+        color: var(--red);
+        font-size: 10.5px;
+        font-weight: 700;
+      }
+      .field-error.visible { display: block; }
+      #amazon-status { cursor: pointer; }
+      .amazon-status-panel {
+        display: none;
+        position: absolute;
+        top: 58px;
+        right: 16px;
+        z-index: 20;
+        min-width: 210px;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface-strong);
+        box-shadow: 0 10px 30px rgba(0,0,0,.14);
+      }
+      .amazon-status-panel.open { display: grid; gap: 6px; }
+      .amazon-status-row { display:flex; justify-content:space-between; gap:12px; font-size:11px; padding:5px; }
+      .amazon-status-row a { color:var(--brand); font-weight:700; }
+      .marketplace-badge { font-size:9px; font-weight:900; padding:2px 5px; border-radius:6px; background:var(--gray-bg); color:var(--gray); }
       .feed-date {
         font-size: 11px;
         color: var(--text-muted);
@@ -468,6 +505,9 @@
         gap: 12px;
         padding: 16px;
       }
+      .list-header:has(#toggle-hidden[hidden]) {
+        display: none;
+      }
       .list-title {
         margin: 0;
         font-size: 12px;
@@ -506,8 +546,8 @@
         list-style: none;
         padding: 10px 10px 10px;
         margin: 0;
-        max-height: 326px;
-        overflow-y: auto;
+        max-height: none;
+        overflow: visible;
       }
       li.product {
         display: flex;
@@ -871,7 +911,7 @@
         grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: 10px;
-        margin: 2px 16px 14px;
+        margin: 0;
         padding: 10px 12px;
         border: 1px solid var(--border);
         border-radius: 14px;
@@ -902,19 +942,30 @@
         font-size: 12px;
         font-weight: 800;
       }
-      .footer-actions {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 14px 16px 16px;
-        border-top: 1px solid var(--border);
-        font-size: 11px;
-        color: var(--muted);
+      .fixed-header {
+        position: relative;
+        z-index: 5;
+        flex: 0 0 auto;
+        background: var(--surface-strong);
+        border-bottom: 1px solid var(--border);
       }
-      .footer-actions a {
+      .content-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      .fixed-footer {
+        flex: 0 0 auto;
+        padding: 8px 12px 10px;
+        border-top: 1px solid var(--border);
+        background: var(--surface-strong);
+      }
+      .settings-links a {
         text-decoration: none;
       }
-      .footer-actions a:hover {
+      .settings-links a:hover {
         color: var(--brand);
       }
     </style>
@@ -923,6 +974,7 @@
     <div id="img-preview"></div>
     <div class="shell">
       <div class="panel">
+        <div class="fixed-header">
         <div class="hero">
           <div class="hero-top">
             <div class="brand">
@@ -933,6 +985,7 @@
               </div>
             </div>
             <div class="eyebrow" id="amazon-status">●</div>
+            <div id="amazon-status-panel" class="amazon-status-panel"></div>
           </div>
           <div class="sub" id="sub">Chargement de ton suivi…</div>
         </div>
@@ -963,7 +1016,9 @@
         </div>
 
         <div class="err" id="err"></div>
+        </div>
 
+        <div class="content-scroll">
         <div class="collapse-target" id="settings">
           <div class="section">
             <div class="stack">
@@ -984,9 +1039,10 @@
                 <div class="inline-field">
                   <div>
                     <label class="field" for="intervalMin">Intervalle auto</label>
-                    <p class="card-copy">Toutes les combien de minutes on refait un check.</p>
+                    <p class="card-copy">Toutes les combien de minutes on refait un check. Minimum 30 minutes.</p>
+                    <p class="field-error" id="intervalMinError" role="alert">Minimum 30 minutes pour protéger ton compte et limiter les requêtes Amazon.</p>
                   </div>
-                  <input id="intervalMin" type="number" min="5" placeholder="30" />
+                  <input id="intervalMin" type="number" min="30" step="5" placeholder="30" aria-describedby="intervalMinError" />
                 </div>
               </div>
 
@@ -1003,7 +1059,7 @@
                 <input id="communityDataEnabled" type="checkbox" />
                 <span>
                   <b>Aider amzinvite avec des données anonymes</b>
-                  <span class="hint">Activé par défaut. Partage anonymement les invitations détectées et certaines observations Amazon pour améliorer le feed et le catalogue.</span>
+                  <span class="hint">Activé par défaut. Partage anonymement les invitations détectées et les observations des pages Amazon que tu consultes.</span>
                 </span>
               </label>
 
@@ -1046,13 +1102,18 @@
                 <a class="button-link support" href="https://buymeacoffee.com/amzinvite" target="_blank" rel="noopener">Buy Me a Coffee</a>
                 <button id="reset" title="Reset complet">Reset</button>
               </div>
+
+              <div class="mini-actions settings-links">
+                <a class="button-link" href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Confidentialité</a>
+                <a class="button-link" href="https://github.com/amzinvite/amzinvite" target="_blank" rel="noopener">GitHub</a>
+              </div>
             </div>
           </div>
         </div>
 
         <div id="amazon-warn" hidden class="amazon-warn">
           ⚠️ Connecte-toi à Amazon pour que l'extension puisse vérifier tes invitations.
-          <a href="https://www.amazon.fr/gp/sign-in.html" target="_blank" rel="noopener">Se connecter →</a>
+          <span id="amazon-warn-links"></span>
         </div>
 
         <div class="list-header">
@@ -1060,7 +1121,9 @@
         </div>
         <ul class="products" id="list"></ul>
         <div class="empty" id="empty"></div>
+        </div>
 
+        <div class="fixed-footer">
         <a class="prixtcg-persistent-link" href="https://prixtcg.fr/pokemon/catalogue?source=amzinvite" target="_blank" rel="noopener noreferrer" title="Comparer les prix Pokémon TCG sur PrixTCG">
           <img src="icons/prixtcg-logo.svg" alt="" />
           <span>
@@ -1069,10 +1132,6 @@
           </span>
           <span class="arrow">↗</span>
         </a>
-
-        <div class="footer-actions">
-          <a href="https://github.com/amzinvite/amzinvite/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
-          <a href="https://github.com/amzinvite/amzinvite" target="_blank" rel="noopener">GitHub</a>
         </div>
       </div>
     </div>

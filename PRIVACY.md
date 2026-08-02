@@ -1,6 +1,6 @@
 # Privacy Policy — amzinvite
 
-**Dernière mise à jour :** 2026-07-30
+**Dernière mise à jour :** 2026-08-02
 
 amzinvite est conçu pour fonctionner avec un minimum de données.
 
@@ -29,7 +29,11 @@ L'extension récupère la liste publique des produits en mode invitation.
 Quand l'option de partage anonyme est activée, l'extension peut envoyer :
 
 - des détections d'état d'invitation
-- certaines observations Amazon utiles à l'amélioration du catalogue
+- les prix et disponibilités détectés sur les pages Amazon que l'utilisateur
+  consulte volontairement
+
+L'extension ne reçoit aucun produit supplémentaire à contrôler pour PrixTCG et
+n'analyse que les pages Amazon effectivement consultées par l'utilisateur.
 
 Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent pas de nom, d'email ou d'informations de paiement.
 
@@ -37,13 +41,13 @@ Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent p
 
 Par défaut, amzinvite suit automatiquement les produits POKÉMON TCG FR via le feed public. Tu peux :
 
-1. désactiver ce suivi automatique à tout moment (ce qui vide la liste des produits du feed)
-2. ajouter des liens Amazon manuellement (conservés même si le feed est désactivé)
-3. laisser le scraping fonctionner sans check automatique si aucun suivi n'est actif
+1. désactiver ce suivi à tout moment
+2. ajouter des liens Amazon FR manuellement (conservés même si le feed est désactivé)
+3. conserver un intervalle automatique d'au moins 30 minutes
 
 ## Données envoyées à Amazon
 
-Si l'option **Auto-demander** est activée, l'extension peut envoyer la demande d'invitation directement à Amazon en utilisant la session Amazon déjà ouverte dans le navigateur.
+Si l'option **Auto-demander** est activée, l'extension peut envoyer la demande d'invitation directement à Amazon France en utilisant la session déjà ouverte dans le navigateur.
 
 ## Contrôle utilisateur
 

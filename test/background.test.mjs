@@ -5,6 +5,7 @@
 // Lancer : node test/background.test.mjs
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 // ─── Mock chrome ──────────────────────────────────────────────────────────
 let store = {};
@@ -29,6 +30,7 @@ function makeStorageArea() {
 }
 
 let messageListener = null;
+let installedListener = null;
 const evt = () => ({ addListener: noop });
 
 globalThis.chrome = {
@@ -39,7 +41,7 @@ globalThis.chrome = {
   },
   runtime: {
     onMessage: { addListener: (fn) => { messageListener = fn; } },
-    onInstalled: { addListener: noop },
+    onInstalled: { addListener: (fn) => { installedListener = fn; } },
     onStartup: { addListener: noop },
     sendMessage: asyncNoop,
     getURL: (p) => `chrome-extension://test/${p}`,
@@ -80,6 +82,7 @@ globalThis.fetch = defaultFetch;
 // ─── Charge le service worker (enregistre messageListener) ─────────────────
 await import("../src/background.js");
 assert.ok(messageListener, "le listener onMessage doit être enregistré");
+assert.ok(installedListener, "le listener onInstalled doit être enregistré");
 
 function dispatch(msg) {
   return new Promise((resolve) => {
@@ -101,6 +104,8 @@ async function test(name, fn) {
 
 const URL_A = "https://www.amazon.fr/dp/B0ABCDEF01";
 const URL_B = "https://www.amazon.fr/dp/B0ABCDEF02";
+const amazonFixture = (name) => readFileSync(new URL(`fixtures/amazon/${name}`, import.meta.url), "utf8")
+  .replace("{{PADDING}}", "Contenu produit anonymisé. ".repeat(700));
 
 // ─── Tests ───────────────────────────────────────────────────────────────
 console.log("export/import + défauts :");
@@ -131,13 +136,13 @@ await test("import-data refuse un fichier invalide", async () => {
 await test("import-data ajoute les produits et applique les réglages", async () => {
   const bundle = {
     app: "amzinvite", version: 1, customUrls: [{ url: URL_A, name: "A" }, { url: URL_B, name: "B" }],
-    settings: { intervalMin: 15, autoRequest: true, soundEnabled: false, trackPokemonTcgFr: false },
+    settings: { intervalMin: 45, autoRequest: true, soundEnabled: false, trackPokemonTcgFr: false },
   };
   const res = await dispatch({ type: "import-data", data: bundle });
   assert.equal(res.ok, true);
   assert.equal(res.added, 2);
   assert.equal(store.customUrls.length, 2);
-  assert.equal(store.intervalMin, 15);
+  assert.equal(store.intervalMin, 45);
   assert.equal(store.autoRequest, true);
   assert.equal(store.soundEnabled, false);
   assert.equal(store.trackPokemonTcgFr, false);
@@ -156,10 +161,10 @@ await test("import-data dédoublonne par ASIN (fusion sans doublon)", async () =
   assert.equal(store.customUrls.length, 2);
 });
 
-await test("import-data borne intervalMin à 5 min minimum", async () => {
+await test("import-data borne intervalMin à 30 min minimum", async () => {
   const res = await dispatch({ type: "import-data", data: { app: "amzinvite", customUrls: [], settings: { intervalMin: 1 } } });
   assert.equal(res.ok, true);
-  assert.equal(store.intervalMin, 5);
+  assert.equal(store.intervalMin, 30);
 });
 
 await test("round-trip export -> import préserve la watchlist", async () => {
@@ -180,6 +185,28 @@ await test("get-watchlist expose les customUrls importées", async () => {
 });
 
 console.log("\nauth v2 aléatoire :");
+
+await test("détecte FR connecté même si Amazon propose un autre compte", async () => {
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://www.amazon.fr/gp/css/homepage.html",
+    text: async () => '<a id="nav-link-accountList">Bonjour Mathieu</a><a href="/ap/signin">Utiliser un compte différent</a><h1>Votre compte</h1>',
+  });
+  const res = await dispatch({ type: "check-amazon-auth", marketplaces: ["amazon.fr"] });
+  assert.equal(res.statuses["amazon.fr"], "connected");
+});
+
+await test("classe une redirection Amazon signin comme déconnectée", async () => {
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://www.amazon.fr/ap/signin?openid.return_to=account",
+    text: async () => "",
+  });
+  const res = await dispatch({ type: "check-amazon-auth", marketplaces: ["amazon.fr"] });
+  assert.equal(res.statuses["amazon.fr"], "disconnected");
+});
 
 await test("enrôle un credential d'instance puis signe le feed en v2", async () => {
   const calls = [];
@@ -206,6 +233,7 @@ await test("enrôle un credential d'instance puis signe le feed en v2", async ()
   assert.equal(calls[0].options.method, "POST");
   assert.equal(calls[1].options.headers["X-Auth-Version"], "2");
   assert.equal(calls[1].options.headers["X-Credential-Id"], "11111111-1111-4111-8111-111111111111");
+  assert.equal(calls[1].url, "https://amzinvite-api.amzinvite.workers.dev/api/public/invitations?marketplaces=amazon.fr");
   assert.match(calls[1].options.headers["X-Sig"], /^[0-9a-f]{64}$/);
   assert.equal(store.authV2InstanceCredential.scope, "instance");
 });
@@ -229,7 +257,7 @@ await test("réutilise le credential v2 stocké sans nouvel enrôlement", async 
   assert.equal(calls[0].options.headers["X-Credential-Id"], store.authV2InstanceCredential.credentialId);
 });
 
-await test("garde le fallback legacy si l'enrôlement v2 est indisponible", async () => {
+await test("échoue sans fallback legacy si l'enrôlement v2 est indisponible", async () => {
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, options });
@@ -240,10 +268,9 @@ await test("garde le fallback legacy si l'enrôlement v2 est indisponible", asyn
   };
 
   const res = await dispatch({ type: "refresh-public-feed" });
-  assert.equal(res.ok, true);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].options.headers["X-Auth-Version"], undefined);
-  assert.match(calls[1].options.headers["X-Sig"], /^[0-9a-f]{64}$/);
+  assert.equal(res.ok, false);
+  assert.match(res.error, /auth registration HTTP 404/);
+  assert.equal(calls.length, 1);
 });
 
 await test("ré-enrôle automatiquement un credential v2 refusé", async () => {
@@ -280,7 +307,7 @@ await test("ré-enrôle automatiquement un credential v2 refusé", async () => {
   assert.equal(calls[2].options.headers["X-Credential-Id"], "44444444-4444-4444-8444-444444444444");
 });
 
-await test("utilise un credential court séparé pour les observations", async () => {
+await test("transmet passivement les observations des pages Amazon visitées", async () => {
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, options });
@@ -308,6 +335,73 @@ await test("utilise un credential court séparé pour les observations", async (
   assert.equal(calls[1].options.headers["X-Auth-Version"], "2");
   assert.equal(calls[1].options.headers["X-Instance-Id"], undefined);
   assert.equal(store.authV2ObservationCredential.scope, "observations");
+});
+
+await test("ne contrôle aucun produit absent de la watchlist", async () => {
+  store.trackPokemonTcgFr = true;
+  store.publicFeed = [];
+  store.publicFeedFetchedAt = Date.now();
+  store.communityDataEnabled = true;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    throw new Error(`fetch inattendu: ${url}`);
+  };
+
+  const result = await dispatch({ type: "check-now" });
+  assert.equal(result.checked, 0);
+  assert.deepEqual(result.items, []);
+  assert.deepEqual(calls, []);
+});
+
+console.log("\nauto-demande :");
+
+await test("redemande une invitation expirée actionnable et pose le cooldown après succès", async () => {
+  store.customUrls = [{ url: URL_A, name: "Fixture expirée" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  store.autoRequest = true;
+  const html = amazonFixture("expired-requestable.html");
+  let postCount = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) return { ok: true, status: 200, url, text: async () => html };
+    if (options.method === "POST" && String(url).includes("highdemandproductcontracts")) {
+      postCount++;
+      return { ok: true, status: 200, text: async () => "{}" };
+    }
+    throw new Error(`fetch inattendu: ${url}`);
+  };
+
+  const res = await dispatch({ type: "check-now" });
+  assert.equal(res.ok, true);
+  assert.equal(res.items[0].autoSuccess, true);
+  assert.equal(res.items[0].state, "already_requested");
+  assert.equal(postCount, 1);
+  assert.ok(store.autoSpawnLog?.[URL_A], "le succès doit créer un cooldown");
+});
+
+await test("un refus Amazon reste visible et ne bloque pas une nouvelle tentative", async () => {
+  store.customUrls = [{ url: URL_A, name: "Fixture expirée" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  store.autoRequest = true;
+  const html = amazonFixture("expired-requestable.html");
+  let postCount = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) return { ok: true, status: 200, url, text: async () => html };
+    if (options.method === "POST" && String(url).includes("highdemandproductcontracts")) {
+      postCount++;
+      return { ok: false, status: 403, text: async () => '{"error":"fixture"}' };
+    }
+    throw new Error(`fetch inattendu: ${url}`);
+  };
+
+  const first = await dispatch({ type: "check-now" });
+  const second = await dispatch({ type: "check-now" });
+  assert.equal(first.items[0].autoError, "amazon HTTP 403");
+  assert.equal(second.items[0].autoError, "amazon HTTP 403");
+  assert.equal(postCount, 2, "un échec doit rester retentable au scan suivant");
+  assert.equal(store.autoSpawnLog, undefined, "un échec ne doit pas créer de cooldown");
 });
 
 console.log(`\n${passed} passés, ${failed} échoués`);

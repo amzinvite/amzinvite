@@ -1,0 +1,11 @@
+{
+  "name": "amzinvite-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "release:pack": "node scripts/release-check.mjs --pack",
+    "release:store-status": "node scripts/store-status.mjs"
+  }
+}

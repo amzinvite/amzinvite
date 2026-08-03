@@ -14,9 +14,9 @@ assert.match(popup, /class="mini-actions settings-links"/);
 assert.doesNotMatch(popup, /class="footer-actions"/);
 assert.match(popup, /class="fixed-footer">\s*<a class="prixtcg-persistent-link"/);
 assert.equal(
-  popup.match(/href="https:\/\/prixtcg\.fr\/pokemon\/catalogue\?source=amzinvite"/g)?.length,
+  popup.match(/href="https:\/\/prixtcg\.fr\/pokemon\/catalogue\?source=amzinvite&amp;utm_source=amzinvite&amp;utm_medium=extension&amp;utm_campaign=popup"/g)?.length,
   2,
-  "les réglages et le bandeau persistant doivent conserver la provenance amzinvite",
+  "les réglages et le bandeau persistant doivent attribuer le trafic à l'extension amzinvite",
 );
 assert.equal(
   popup.match(/src="icons\/prixtcg-logo\.svg"/g)?.length,

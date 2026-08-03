@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.28] — attribution du trafic PrixTCG
+
+### Fixes
+- Ajoute les paramètres UTM aux liens PrixTCG afin d'attribuer les visites à
+  Amzinvite dans Google Analytics, tout en conservant le paramètre `source`
+  utilisé par le routage existant.
+
 ## [0.1.27] — fiabilité Amazon et PrixTCG
 
 ### Features

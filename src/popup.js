@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 
 let nextCheckTimer = null;
+let waveCountdownTimer = null;
 let activeFilter = "all";
 let currentItems = [];
 let currentLastRun = null;
@@ -19,6 +20,26 @@ const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
 const NEW_FEED_ITEM_MS = 15 * 24 * 60 * 60 * 1000;
+
+function renderWaveCountdown() {
+  const main = $("wave-countdown-main");
+  const detail = $("wave-countdown-detail");
+  if (!main || !detail) return;
+  const wave = AmzinvitePopupState.nextEstimatedWave(new Date());
+  if (!wave) {
+    main.textContent = "Prochaine vague estimée : —";
+    return;
+  }
+  const remaining = AmzinvitePopupState.formatWaveCountdown(wave.at - Date.now());
+  main.textContent = `Prochaine vague estimée dans ${remaining}`;
+  detail.textContent = wave.label;
+}
+
+function startWaveCountdown() {
+  clearInterval(waveCountdownTimer);
+  renderWaveCountdown();
+  waveCountdownTimer = setInterval(renderWaveCountdown, 30_000);
+}
 
 const STATE_LABELS = {
   available: { txt: "Dispo à demander", cls: "available" },
@@ -263,6 +284,7 @@ async function load() {
   setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr == null ? true : cfg.trackPokemonTcgFr);
   setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
   setViewMode(!!cfg.compactMode);
+  startWaveCountdown();
   renderAutoRequestNote();
   renderAutoRequestPrompt(cfg);
   await renderPokemonFeedDate();
@@ -904,7 +926,10 @@ document.querySelectorAll(".stat[data-filter]").forEach((el) => {
 });
 
 
-window.addEventListener("beforeunload", stopNextCheckTimer);
+window.addEventListener("beforeunload", () => {
+  stopNextCheckTimer();
+  clearInterval(waveCountdownTimer);
+});
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", load);

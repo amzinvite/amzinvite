@@ -167,6 +167,8 @@
       .stat.info .n { color: var(--blue); }
       .status-wrap {
         padding: 8px 12px 0;
+        display: grid;
+        gap: 6px;
       }
       .status-line {
         display: flex;
@@ -187,6 +189,37 @@
         background: var(--brand);
         box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 14%, transparent);
       }
+      .wave-countdown {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        column-gap: 9px;
+        align-items: center;
+        padding: 8px 10px;
+        border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--border));
+        border-radius: 11px;
+        background: color-mix(in srgb, var(--blue) 8%, var(--surface-strong));
+      }
+      .wave-countdown-icon {
+        grid-row: 1 / 3;
+        font-size: 17px;
+      }
+      .wave-countdown-main {
+        color: var(--text);
+        font-size: 11px;
+        font-weight: 800;
+      }
+      .wave-countdown-detail {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 9px;
+      }
+      .wave-countdown-detail a {
+        margin-left: 4px;
+        color: var(--blue);
+        font-weight: 800;
+        text-decoration: none;
+      }
+      .wave-countdown-detail a:hover { text-decoration: underline; }
       .actions {
         display: grid;
         grid-template-columns: 1fr auto auto;
@@ -998,6 +1031,14 @@
 
         <div class="status-wrap">
           <div class="status-line" id="next-check">Prochain check auto : —</div>
+          <div class="wave-countdown" id="wave-countdown">
+            <span class="wave-countdown-icon" aria-hidden="true">🌊</span>
+            <span class="wave-countdown-main" id="wave-countdown-main">Prochaine vague estimée : —</span>
+            <span class="wave-countdown-detail">
+              <span id="wave-countdown-detail">Basé sur les vagues détectées par amzinvite</span>
+              <a href="https://prixtcg.fr/amzinvite/stats?source=amzinvite&amp;utm_source=amzinvite&amp;utm_medium=extension&amp;utm_campaign=wave_countdown" target="_blank" rel="noopener noreferrer">Voir les stats ↗</a>
+            </span>
+          </div>
         </div>
 
         <div class="actions">

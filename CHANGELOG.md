@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.30] — rythme des vagues d’invitations
+
+### Features
+- Affiche un compte à rebours jusqu’à la prochaine vague estimée à partir du
+  rythme observé.
+- Ajoute un accès direct aux statistiques publiques de la dernière vague sur
+  PrixTCG.
+
+### Changes
+- Présente l’estimation sans mention technique superflue dans le popup.
+
 ## [0.1.29] — télémétrie économe et résiliente
 
 ### Changes

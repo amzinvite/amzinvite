@@ -18,6 +18,12 @@ assert.equal(
   2,
   "les réglages et le bandeau persistant doivent attribuer le trafic à l'extension amzinvite",
 );
+
+assert.match(
+  popup,
+  /href="https:\/\/prixtcg\.fr\/amzinvite\/stats\?source=amzinvite&amp;utm_source=amzinvite&amp;utm_medium=extension&amp;utm_campaign=wave_countdown"/,
+  "le compte à rebours doit ouvrir les statistiques publiques de la dernière vague",
+);
 assert.equal(
   popup.match(/src="icons\/prixtcg-logo\.svg"/g)?.length,
   2,

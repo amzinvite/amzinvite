@@ -2,7 +2,7 @@
   const PARIS_TIME_ZONE = "Europe/Paris";
   const ESTIMATED_WAVE_SLOTS = Object.freeze([
     { weekday: 1, hour: 22, minute: 0, label: "lundi vers 22 h" },
-    { weekday: 5, hour: 11, minute: 30, label: "vendredi vers 11 h 30" },
+    { weekday: 5, hour: 10, minute: 0, label: "vendredi vers 10 h" },
   ]);
 
   function shouldOfferAutoRequest({

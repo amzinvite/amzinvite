@@ -328,13 +328,51 @@ await test("transmet passivement les observations des pages Amazon visitées", a
 
   const res = await dispatch({
     type: "scrape-items",
-    items: [{ asin: "B0ABCDEF01", price: 39.99, in_stock: true }],
+    items: [{
+      asin: "B0ABCDEF01",
+      marketplace: "amazon.fr",
+      price: 39.99,
+      in_stock: true,
+      stock_status: "in_stock",
+    }],
   });
   assert.equal(res.ok, true);
+  assert.equal(res.queued, 1);
+  assert.equal(calls.length, 0);
+
+  const duplicate = await dispatch({
+    type: "scrape-items",
+    items: [{
+      asin: "B0ABCDEF01",
+      marketplace: "amazon.fr",
+      price: 39.99,
+      in_stock: true,
+      stock_status: "in_stock",
+    }],
+  });
+  assert.equal(duplicate.deduped, 1);
+
+  const flushed = await dispatch({ type: "flush-observations" });
+  assert.equal(flushed.ok, true);
+  assert.equal(flushed.sent, 1);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].options.headers["X-Auth-Version"], "2");
   assert.equal(calls[1].options.headers["X-Instance-Id"], undefined);
   assert.equal(store.authV2ObservationCredential.scope, "observations");
+  assert.deepEqual(store.observationQueue, {});
+
+  const alreadySent = await dispatch({
+    type: "scrape-items",
+    items: [{
+      asin: "B0ABCDEF01",
+      marketplace: "amazon.fr",
+      price: 39.99,
+      in_stock: true,
+      stock_status: "in_stock",
+    }],
+  });
+  assert.equal(alreadySent.deduped, 1);
+  assert.equal(calls.length, 2);
 });
 
 await test("ne contrôle aucun produit absent de la watchlist", async () => {

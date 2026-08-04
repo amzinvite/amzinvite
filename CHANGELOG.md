@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.29] — télémétrie économe et résiliente
+
+### Changes
+- Déduplique localement pendant une heure les feedbacks identiques avant leur
+  envoi au backend.
+- Met les observations Amazon en file locale et les envoie par lots, avec un
+  premier essai après une minute puis une reprise automatique toutes les cinq
+  minutes.
+- Conserve les observations dans la file tant que le backend ne confirme pas
+  leur réception, afin de résister aux erreurs réseau et aux limitations.
+
+### Tests
+- Vérifie la mise en file, la déduplication, la signature du lot, le retrait
+  après succès et l'absence de renvoi dans la même heure.
+
 ## [0.1.28] — attribution du trafic PrixTCG
 
 ### Fixes

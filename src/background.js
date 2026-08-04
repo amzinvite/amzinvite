@@ -37,6 +37,7 @@ const AUTH_V2_STORAGE_KEYS = {
 const AUTH_V2_OBSERVATION_ROTATE_AHEAD_MS = 6 * 60 * 60 * 1000;
 const authV2RegistrationPromises = new Map();
 const ALARM_NAME = "invitation-check";
+const OBSERVATION_FLUSH_ALARM_NAME = "observation-flush";
 const DEFAULT_INTERVAL_MIN = 30;
 const MIN_INTERVAL_MIN = 30;
 const PER_REQUEST_DELAY_MS = 8_000;
@@ -48,6 +49,12 @@ const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const BUYABLE_BADGE_BG = "#1D7A52";
 const MAX_NEW_FEED_NOTIFICATIONS = 3;
+const TELEMETRY_DEDUPE_MS = 60 * 60 * 1000;
+const OBSERVATION_FLUSH_PERIOD_MIN = 5;
+const OBSERVATION_BATCH_SIZE = 100;
+const FEEDBACK_SENT_STORAGE_KEY = "feedbackSentBuckets";
+const OBSERVATION_QUEUE_STORAGE_KEY = "observationQueue";
+const OBSERVATION_SENT_STORAGE_KEY = "observationSentBuckets";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Identifiant d'instance anonyme — généré au premier lancement
@@ -590,10 +597,16 @@ async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeS
   const source = calledWithUrl ? (stateOrSource || "bg_check") : (maybeSource || "bg_check");
   const { communityDataEnabled } = await getSettings();
   if (!communityDataEnabled || !asin || !marketplace) return;
+  const now = Date.now();
+  const bucket = Math.floor(now / TELEMETRY_DEDUPE_MS);
+  const dedupeKey = `${bucket}:${marketplace}:${asin.toUpperCase()}:${state}:${source}`;
+  const stored = await chrome.storage.local.get(FEEDBACK_SENT_STORAGE_KEY);
+  const sentBuckets = stored[FEEDBACK_SENT_STORAGE_KEY] || {};
+  if (sentBuckets[dedupeKey]) return { deduped: true };
   try {
     const instanceId = await getInstanceId();
-    const body = JSON.stringify({ marketplace, asin, state, source, observedAt: Math.floor(Date.now() / 1000) });
-    await authenticatedFetch(`${API_BASE}/api/extension/feedback`, {
+    const body = JSON.stringify({ marketplace, asin, state, source, observedAt: Math.floor(now / 1000) });
+    const response = await authenticatedFetch(`${API_BASE}/api/extension/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
@@ -602,8 +615,18 @@ async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeS
       scope: "instance",
       instanceId,
     });
+    if (!response.ok) throw new Error(`feedback HTTP ${response.status}`);
+    const freshBuckets = Object.fromEntries(
+      Object.entries(sentBuckets)
+        .filter(([, timestamp]) => now - Number(timestamp) < 2 * TELEMETRY_DEDUPE_MS)
+        .slice(-500),
+    );
+    freshBuckets[dedupeKey] = now;
+    await chrome.storage.local.set({ [FEEDBACK_SENT_STORAGE_KEY]: freshBuckets });
+    return { sent: true };
   } catch (e) {
     console.warn("[amzinvite] feedback failed:", e);
+    return { error: String(e) };
   }
 }
 
@@ -631,6 +654,71 @@ async function getPrice(marketplace, asin) {
   return priceHistory?.[key] ?? null;
 }
 
+function observationIdentity(item) {
+  const asin = String(item?.external_id || item?.asin || "").toUpperCase();
+  const marketplace = normalizeAmazonHostname(item?.marketplace)
+    || marketplaceFromUrl(item?.url || item?.source_url);
+  if (!marketplace || !/^[A-Z0-9]{10}$/.test(asin)) return null;
+  return { asin, marketplace, key: `${marketplace}:${asin}` };
+}
+
+function observationFingerprint(item) {
+  return JSON.stringify([
+    item.name || null,
+    item.price ?? null,
+    item.in_stock ?? null,
+    item.stock_status || null,
+    item.image_url || null,
+  ]);
+}
+
+async function scheduleObservationFlush() {
+  await chrome.alarms.create(OBSERVATION_FLUSH_ALARM_NAME, {
+    delayInMinutes: 1,
+    periodInMinutes: OBSERVATION_FLUSH_PERIOD_MIN,
+  });
+}
+
+async function flushObservationQueue() {
+  const stored = await chrome.storage.local.get([
+    OBSERVATION_QUEUE_STORAGE_KEY,
+    OBSERVATION_SENT_STORAGE_KEY,
+  ]);
+  const queue = stored[OBSERVATION_QUEUE_STORAGE_KEY] || {};
+  const entries = Object.entries(queue).slice(0, OBSERVATION_BATCH_SIZE);
+  if (!entries.length) return { sent: 0 };
+
+  const dayBucket = new Date().toISOString().slice(0, 10);
+  const body = JSON.stringify({ items: entries.map(([, value]) => value.item), dayBucket });
+  const response = await authenticatedFetch(`${API_BASE}/api/extension/observations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  }, {
+    payload: body,
+    scope: "observations",
+  });
+  if (!response.ok) throw new Error(`observations HTTP ${response.status}`);
+
+  const latest = await chrome.storage.local.get(OBSERVATION_QUEUE_STORAGE_KEY);
+  const nextQueue = latest[OBSERVATION_QUEUE_STORAGE_KEY] || {};
+  const now = Date.now();
+  const sentBuckets = Object.fromEntries(
+    Object.entries(stored[OBSERVATION_SENT_STORAGE_KEY] || {})
+      .filter(([, timestamp]) => now - Number(timestamp) < 2 * TELEMETRY_DEDUPE_MS)
+      .slice(-1000),
+  );
+  for (const [key, value] of entries) {
+    if (nextQueue[key]?.fingerprint === value.fingerprint) delete nextQueue[key];
+    sentBuckets[value.dedupeKey] = now;
+  }
+  await chrome.storage.local.set({
+    [OBSERVATION_QUEUE_STORAGE_KEY]: nextQueue,
+    [OBSERVATION_SENT_STORAGE_KEY]: sentBuckets,
+  });
+  return { sent: entries.length, remaining: Object.keys(nextQueue).length };
+}
+
 async function forwardScrape(items) {
   const { communityDataEnabled } = await getSettings();
 
@@ -642,25 +730,38 @@ async function forwardScrape(items) {
   }
 
   if (!communityDataEnabled || !items?.length) return { skipped: true };
-  try {
-    // Anonymisation : pas d'instanceId envoyé avec les observations scrape,
-    // juste un dayBucket hashé pour rate-limit serveur.
-    const dayBucket = new Date().toISOString().slice(0, 10);
-    const body = JSON.stringify({ items, dayBucket });
-    const response = await authenticatedFetch(`${API_BASE}/api/extension/observations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    }, {
-      payload: body,
-      scope: "observations",
-    });
-    if (!response.ok) throw new Error(`observations HTTP ${response.status}`);
-    return { sent: items.length };
-  } catch (e) {
-    console.warn("[amzinvite] scrape forward failed:", e);
-    return { error: String(e) };
+
+  const now = Date.now();
+  const bucket = Math.floor(now / TELEMETRY_DEDUPE_MS);
+  const stored = await chrome.storage.local.get([
+    OBSERVATION_QUEUE_STORAGE_KEY,
+    OBSERVATION_SENT_STORAGE_KEY,
+  ]);
+  const queue = stored[OBSERVATION_QUEUE_STORAGE_KEY] || {};
+  const sentBuckets = stored[OBSERVATION_SENT_STORAGE_KEY] || {};
+  let queued = 0;
+  let deduped = 0;
+  for (const item of items) {
+    const identity = observationIdentity(item);
+    if (!identity) continue;
+    const normalizedItem = { ...item, marketplace: identity.marketplace, external_id: identity.asin };
+    const fingerprint = observationFingerprint(normalizedItem);
+    const dedupeKey = `${bucket}:${identity.key}:${fingerprint}`;
+    if (sentBuckets[dedupeKey] || queue[identity.key]?.dedupeKey === dedupeKey) {
+      deduped++;
+      continue;
+    }
+    queue[identity.key] = { item: normalizedItem, fingerprint, dedupeKey, queuedAt: now };
+    queued++;
   }
+  await chrome.storage.local.set({ [OBSERVATION_QUEUE_STORAGE_KEY]: queue });
+  await scheduleObservationFlush();
+
+  if (Object.keys(queue).length >= OBSERVATION_BATCH_SIZE) {
+    try { return { queued, deduped, ...(await flushObservationQueue()) }; }
+    catch (e) { console.warn("[amzinvite] scrape flush failed:", e); }
+  }
+  return { queued, deduped };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -869,6 +970,7 @@ async function checkMarketplaceAuth(marketplace) {
 chrome.runtime.onInstalled.addListener(async (details) => {
   await migrateMarketplaceStorage();
   void scheduleAlarm();
+  void scheduleObservationFlush();
   void setupOriginRewrite();
 
   const existing = await chrome.storage.local.get([
@@ -906,14 +1008,19 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(() => {
   void migrateMarketplaceStorage();
   scheduleAlarm();
+  scheduleObservationFlush();
   setupOriginRewrite();
   updateActionBadge();
 });
 setupOriginRewrite();
+void scheduleObservationFlush();
 void migrateMarketplaceStorage().then(() => updateActionBadge());
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) runCheck();
+  if (alarm.name === OBSERVATION_FLUSH_ALARM_NAME) {
+    void flushObservationQueue().catch((e) => console.warn("[amzinvite] observation flush failed:", e));
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -1010,6 +1117,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "scrape-items") {
     forwardScrape(msg.items)
+      .then((res) => sendResponse({ ok: true, ...res }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "flush-observations") {
+    flushObservationQueue()
       .then((res) => sendResponse({ ok: true, ...res }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;

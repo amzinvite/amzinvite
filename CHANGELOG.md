@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.31] — identifiant d’installation stable
+
+### Fixes
+- Sérialise la création de l’identifiant anonyme au premier lancement afin que
+  des tâches concurrentes ne puissent plus enregistrer plusieurs UUID pour une
+  seule installation Chrome.
+
+### Tests
+- Vérifie que vingt appels concurrents réutilisent tous le même identifiant.
+
 ## [0.1.30] — rythme des vagues d’invitations
 
 ### Features

@@ -80,7 +80,7 @@ const defaultFetch = async (url, options = {}) => {
 globalThis.fetch = defaultFetch;
 
 // ─── Charge le service worker (enregistre messageListener) ─────────────────
-await import("../src/background.js");
+const backgroundModule = await import("../src/background.js");
 assert.ok(messageListener, "le listener onMessage doit être enregistré");
 assert.ok(installedListener, "le listener onInstalled doit être enregistré");
 
@@ -106,6 +106,14 @@ const URL_A = "https://www.amazon.fr/dp/B0ABCDEF01";
 const URL_B = "https://www.amazon.fr/dp/B0ABCDEF02";
 const amazonFixture = (name) => readFileSync(new URL(`fixtures/amazon/${name}`, import.meta.url), "utf8")
   .replace("{{PADDING}}", "Contenu produit anonymisé. ".repeat(700));
+
+console.log("identifiant d'instance :");
+
+await test("réutilise un seul UUID lors d'appels concurrents au premier lancement", async () => {
+  const ids = await Promise.all(Array.from({ length: 20 }, () => backgroundModule.getInstanceId()));
+  assert.equal(new Set(ids).size, 1);
+  assert.equal(store.instanceId, ids[0]);
+});
 
 // ─── Tests ───────────────────────────────────────────────────────────────
 console.log("export/import + défauts :");

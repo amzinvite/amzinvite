@@ -55,16 +55,29 @@ const OBSERVATION_BATCH_SIZE = 100;
 const FEEDBACK_SENT_STORAGE_KEY = "feedbackSentBuckets";
 const OBSERVATION_QUEUE_STORAGE_KEY = "observationQueue";
 const OBSERVATION_SENT_STORAGE_KEY = "observationSentBuckets";
+let instanceIdCreationPromise = null;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Identifiant d'instance anonyme — généré au premier lancement
 // ─────────────────────────────────────────────────────────────────────────
-async function getInstanceId() {
+export async function getInstanceId() {
   const { instanceId } = await chrome.storage.local.get("instanceId");
   if (instanceId) return instanceId;
-  const fresh = crypto.randomUUID();
-  await chrome.storage.local.set({ instanceId: fresh });
-  return fresh;
+
+  if (!instanceIdCreationPromise) {
+    instanceIdCreationPromise = (async () => {
+      // Un second contrôle évite qu'un autre appel, déjà en attente sur
+      // chrome.storage, génère un UUID concurrent au premier démarrage.
+      const latest = await chrome.storage.local.get("instanceId");
+      if (latest.instanceId) return latest.instanceId;
+      const fresh = crypto.randomUUID();
+      await chrome.storage.local.set({ instanceId: fresh });
+      return fresh;
+    })().finally(() => {
+      instanceIdCreationPromise = null;
+    });
+  }
+  return instanceIdCreationPromise;
 }
 
 async function getSettings() {

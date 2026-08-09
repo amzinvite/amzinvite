@@ -104,6 +104,7 @@ async function test(name, fn) {
 
 const URL_A = "https://www.amazon.fr/dp/B0ABCDEF01";
 const URL_B = "https://www.amazon.fr/dp/B0ABCDEF02";
+const URL_BE = "https://www.amazon.com.be/dp/B0ABCDEF03";
 const amazonFixture = (name) => readFileSync(new URL(`fixtures/amazon/${name}`, import.meta.url), "utf8")
   .replace("{{PADDING}}", "Contenu produit anonymisé. ".repeat(700));
 
@@ -113,6 +114,79 @@ await test("réutilise un seul UUID lors d'appels concurrents au premier lanceme
   const ids = await Promise.all(Array.from({ length: 20 }, () => backgroundModule.getInstanceId()));
   assert.equal(new Set(ids).size, 1);
   assert.equal(store.instanceId, ids[0]);
+});
+
+console.log("\nscheduler intelligent :");
+
+await test("le calendrier de secours ne lance des checks qu'après le début des vagues", async () => {
+  const schedule = backgroundModule.fallbackWaveSchedule(Date.parse("2026-08-09T12:00:00Z"));
+  assert.deepEqual(schedule.scan_offsets_minutes, [5, 35, 90, 180, 360, 720, 1380]);
+  assert.ok(schedule.scan_offsets_minutes.every((offset) => offset > 0));
+  assert.ok(schedule.waves.some((wave) => new Date(wave.starts_at * 1000).toISOString() === "2026-08-10T18:00:00.000Z"));
+});
+
+await test("planifie un rattrapage pendant une vague en cours", async () => {
+  const now = Date.now();
+  store.trackPokemonTcgFr = true;
+  store.bootstrapFetchedAt = now;
+  store.smartSchedule = {
+    version: "test",
+    waves: [{ id: "wave-now", starts_at: (now - 20 * 60000) / 1000, ends_at: (now + 23 * 3600000) / 1000 }],
+    scan_offsets_minutes: [5, 35],
+    jitter_minutes: 0,
+    sync_interval_minutes: 360,
+    custom_interval_minutes: 360,
+  };
+  await backgroundModule.scheduleAlarm({ force: true });
+  assert.match(store.schedulerPlan.reason, /^wave_(catchup|check)$/);
+  assert.ok(store.schedulerPlan.when > now);
+});
+
+await test("planifie seulement le nouveau produit quelques minutes après sa découverte", async () => {
+  const now = Date.now();
+  store.trackPokemonTcgFr = true;
+  store.bootstrapFetchedAt = now;
+  store.pendingNewFeedUrls = [URL_A];
+  store.schedulerState = { newFeedCheckAt: now + 3 * 60000 };
+  store.smartSchedule = {
+    version: "test",
+    waves: [],
+    scan_offsets_minutes: [5, 35],
+    jitter_minutes: 0,
+    sync_interval_minutes: 360,
+    custom_interval_minutes: 360,
+  };
+  await backgroundModule.scheduleAlarm({ force: true });
+  assert.equal(store.schedulerPlan.reason, "new_feed_check");
+  assert.equal(store.schedulerPlan.when, store.schedulerState.newFeedCheckAt);
+});
+
+await test("ne notifie qu'une fois la même vague finalisée", async () => {
+  let notifications = 0;
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async () => { notifications++; };
+  try {
+    const wave = { id: "wave-final", finalized: true, selected_users: 12, products: 2 };
+    await backgroundModule.notifyFinalizedWave(wave);
+    await backgroundModule.notifyFinalizedWave(wave);
+    assert.equal(notifications, 1);
+    assert.equal(store.lastNotifiedFinalizedWaveId, "wave-final");
+    assert.equal(store.localAlerts.length, 1);
+    assert.equal(store.localAlerts[0].kind, "wave_finalized");
+    assert.equal(store.localAlerts[0].read, false);
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("expose, marque comme lues et efface les alertes locales", async () => {
+  store.localAlerts = [{ id: "alert-1", title: "Test", createdAt: Date.now(), read: false }];
+  const initial = await dispatch({ type: "get-local-alerts" });
+  assert.equal(initial.alerts.length, 1);
+  await dispatch({ type: "mark-local-alerts-read" });
+  assert.equal(store.localAlerts[0].read, true);
+  await dispatch({ type: "clear-local-alerts" });
+  assert.deepEqual(store.localAlerts, []);
 });
 
 // ─── Tests ───────────────────────────────────────────────────────────────
@@ -150,7 +224,7 @@ await test("import-data ajoute les produits et applique les réglages", async ()
   assert.equal(res.ok, true);
   assert.equal(res.added, 2);
   assert.equal(store.customUrls.length, 2);
-  assert.equal(store.intervalMin, 45);
+  assert.equal(store.intervalMin, undefined, "l'ancien intervalle importé doit être ignoré");
   assert.equal(store.autoRequest, true);
   assert.equal(store.soundEnabled, false);
   assert.equal(store.trackPokemonTcgFr, false);
@@ -169,12 +243,6 @@ await test("import-data dédoublonne par ASIN (fusion sans doublon)", async () =
   assert.equal(store.customUrls.length, 2);
 });
 
-await test("import-data borne intervalMin à 30 min minimum", async () => {
-  const res = await dispatch({ type: "import-data", data: { app: "amzinvite", customUrls: [], settings: { intervalMin: 1 } } });
-  assert.equal(res.ok, true);
-  assert.equal(store.intervalMin, 30);
-});
-
 await test("round-trip export -> import préserve la watchlist", async () => {
   store.customUrls = [{ url: URL_A, name: "A" }, { url: URL_B, name: "B" }];
   const exp = await dispatch({ type: "export-data" });
@@ -190,6 +258,24 @@ await test("get-watchlist expose les customUrls importées", async () => {
   const res = await dispatch({ type: "get-watchlist" });
   assert.equal(res.ok, true);
   assert.ok(res.items.some((i) => i.url === URL_A));
+});
+
+await test("ajoute et normalise un lien produit Amazon Belgique", async () => {
+  let amazonFetches = 0;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).includes("amazon.com.be")) amazonFetches++;
+    return defaultFetch(url, options);
+  };
+  const res = await dispatch({
+    type: "add-custom-url",
+    url: "https://www.amazon.com.be/fr/Pokemon/gp/product/B0ABCDEF03?th=1",
+  });
+  assert.equal(res.ok, true);
+  assert.equal(res.added, true);
+  assert.equal(res.url, URL_BE);
+  assert.equal(res.state, "unknown");
+  assert.equal(store.customUrls[0].url, URL_BE);
+  assert.equal(amazonFetches, 0, "l’ajout BE ne doit pas vérifier immédiatement la page Amazon");
 });
 
 console.log("\nauth v2 aléatoire :");

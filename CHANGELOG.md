@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.32] — surveillance intelligente des vagues
+
+### Features
+- Conserve localement les 30 dernières alertes dans une boîte de réception avec statut lu/non lu et liens d’action.
+- Ajoute une recherche locale instantanée par nom, ASIN ou marketplace dans la liste des produits suivis.
+- Autorise l’ajout manuel de liens produits Amazon Belgique (`amazon.com.be`).
+- Planifie le contrôle d’un nouveau produit du feed 2 à 10 minutes après sa découverte, sans rescanner toute la liste.
+- Remplace l'intervalle manuel par des contrôles ponctuels et aléatoires après le début de chaque vague.
+- Couvre la fenêtre de 24 h avec rattrapage au prochain démarrage de Chrome.
+- Notifie une seule fois la publication des statistiques finalisées, y compris après un démarrage tardif.
+- Groupe les feedbacks d'un cycle afin de réduire les appels au Worker.
+
+### Changes
+- Affiche les réglages dans un écran dédié à l’intérieur de l’extension, avec retour vers le suivi, sans panneau superposé.
+- Ajoute les produits Amazon Belgique en statut « À vérifier » sans exiger que la page expose immédiatement le mode invitation.
+- Corrige la demande de permission Amazon Belgique avec des origines HTTPS strictes compatibles avec Chrome.
+- Précise dans le compteur s’il s’agit d’une synchronisation, d’un contrôle Amazon ou d’un rattrapage.
+- Synchronise le feed sans requête Amazon avant les vagues.
+- Mélange l'ordre des produits et élargit les pauses aléatoires entre requêtes.
+- Interrompt un cycle en cas de captcha, HTTP 403 ou HTTP 429.
+- Ajoute une construction minifiée `src/` vers `dist/` pour les archives Chrome Store.
+
 ## [0.1.31] — identifiant d’installation stable
 
 ### Fixes

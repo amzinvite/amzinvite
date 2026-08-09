@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 let nextCheckTimer = null;
 let waveCountdownTimer = null;
 let activeFilter = "all";
+let productSearchQuery = "";
 let currentItems = [];
 let currentLastRun = null;
 let currentScanUrl = null;
@@ -20,12 +21,31 @@ const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
 const NEW_FEED_ITEM_MS = 15 * 24 * 60 * 60 * 1000;
+const AMAZON_BE_ORIGINS = [
+  "https://www.amazon.com.be/*",
+  "https://data.amazon.com.be/*",
+];
 
-function renderWaveCountdown() {
+async function renderWaveCountdown() {
   const main = $("wave-countdown-main");
   const detail = $("wave-countdown-detail");
   if (!main || !detail) return;
-  const wave = AmzinvitePopupState.nextEstimatedWave(new Date());
+  const now = Date.now();
+  const { smartSchedule } = await chrome.storage.local.get("smartSchedule");
+  const serverWave = (smartSchedule?.waves || [])
+    .filter((entry) => Number(entry.starts_at) * 1000 > now)
+    .sort((left, right) => Number(left.starts_at) - Number(right.starts_at))[0];
+  const wave = serverWave
+    ? {
+        at: Number(serverWave.starts_at) * 1000,
+        label: new Intl.DateTimeFormat("fr-FR", {
+          timeZone: smartSchedule.timezone || "Europe/Paris",
+          weekday: "long",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(Number(serverWave.starts_at) * 1000)).replace(":00", " h"),
+      }
+    : AmzinvitePopupState.nextEstimatedWave(new Date());
   if (!wave) {
     main.textContent = "Prochaine vague estimée : —";
     return;
@@ -37,8 +57,8 @@ function renderWaveCountdown() {
 
 function startWaveCountdown() {
   clearInterval(waveCountdownTimer);
-  renderWaveCountdown();
-  waveCountdownTimer = setInterval(renderWaveCountdown, 30_000);
+  void renderWaveCountdown();
+  waveCountdownTimer = setInterval(() => void renderWaveCountdown(), 30_000);
 }
 
 const STATE_LABELS = {
@@ -101,13 +121,57 @@ function asinFromUrl(url) {
   }
 }
 
+async function ensureAmazonBelgiumPermission(rawUrl) {
+  let host;
+  try {
+    host = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return true;
+  }
+  if (host !== "amazon.com.be") return true;
+  if (!chrome.permissions?.request) return true;
+  if (await chrome.permissions.contains({ origins: AMAZON_BE_ORIGINS })) return true;
+  try {
+    return await chrome.permissions.request({ origins: AMAZON_BE_ORIGINS });
+  } catch (error) {
+    if (/only permissions specified in the manifest/i.test(String(error))) {
+      throw new Error("Recharge l’extension dans chrome://extensions, puis réessaie l’ajout Amazon Belgique.");
+    }
+    throw error;
+  }
+}
+
 function shortPath(url) {
   const asin = asinFromUrl(url);
   return asin ? `/dp/${asin}` : url;
 }
 
+function normalizedSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function matchesProductSearch(item) {
+  const query = normalizedSearchText(productSearchQuery.trim());
+  if (!query) return true;
+  return normalizedSearchText([
+    item?.name,
+    asinFromUrl(item?.url),
+    item?.marketplace,
+    marketplaceFromItem(item),
+    item?.url,
+  ].join(" ")).includes(query);
+}
+
 function marketplaceFromItem(item) {
-  return "FR";
+  try {
+    const host = new URL(item?.url).hostname.toLowerCase().replace(/^www\./, "");
+    return host === "amazon.com.be" ? "BE" : "FR";
+  } catch {
+    return "FR";
+  }
 }
 
 function isNewFeedItem(item) {
@@ -163,12 +227,24 @@ async function renderAmazonStatus() {
   const warn = $("amazon-warn");
   const panel = $("amazon-status-panel");
   try {
-    const cfg = await chrome.storage.local.get(["trackPokemonTcgFr"]);
+    const cfg = await chrome.storage.local.get(["trackPokemonTcgFr", "customUrls"]);
     const active = [];
     if (cfg.trackPokemonTcgFr !== false) active.push("amazon.fr");
+    const hasBelgianProduct = (cfg.customUrls || []).some((entry) => {
+      try {
+        return new URL(typeof entry === "string" ? entry : entry?.url).hostname
+          .toLowerCase().replace(/^www\./, "") === "amazon.com.be";
+      } catch {
+        return false;
+      }
+    });
+    if (hasBelgianProduct) active.push("amazon.com.be");
     const res = await sendMessage({ type: "check-amazon-auth", marketplaces: active });
     const statuses = res?.statuses || {};
-    const meta = { "amazon.fr": ["FR", "https://www.amazon.fr/gp/sign-in.html"] };
+    const meta = {
+      "amazon.fr": ["FR", "https://www.amazon.fr/gp/sign-in.html"],
+      "amazon.com.be": ["BE", "https://www.amazon.com.be/gp/sign-in.html"],
+    };
     const symbol = (status) => status === "connected" ? "●" : status === "disconnected" ? "○" : "?";
     const label = (status) => status === "connected" ? "Connecté" : status === "disconnected" ? "Non connecté" : "À vérifier";
     if (active.length === 0) {
@@ -189,6 +265,32 @@ async function renderAmazonStatus() {
     if (el) { el.textContent = "● Amazon"; el.className = "eyebrow"; }
     if (warn) warn.hidden = true;
   }
+}
+
+function alertIcon(kind) {
+  if (kind === "accepted") return "🎉";
+  if (kind === "available" || kind === "auto_request") return "🎟️";
+  if (kind === "wave_finalized") return "🌊";
+  if (kind === "feed_new") return "🆕";
+  return "🔔";
+}
+
+async function renderLocalAlerts() {
+  const res = await sendMessage({ type: "get-local-alerts" });
+  const alerts = res?.alerts || [];
+  const unread = alerts.filter((alert) => !alert.read).length;
+  const dot = $("alerts-dot");
+  dot.hidden = unread === 0;
+  dot.textContent = unread > 9 ? "9+" : String(unread || "");
+  $("clear-alerts").hidden = alerts.length === 0;
+  $("alerts-list").innerHTML = alerts.length
+    ? alerts.map((alert) => {
+        const content = `<span>${alertIcon(alert.kind)}</span><span><span class="alert-entry-title">${escapeHTML(alert.title)}${Number(alert.count || 1) > 1 ? ` ×${Number(alert.count)}` : ""}</span><span class="alert-entry-message">${escapeHTML(alert.message)}</span><span class="alert-entry-meta">${relativeTime(Number(alert.createdAt || Date.now()))}</span></span>`;
+        return alert.url
+          ? `<a class="alert-entry${alert.read ? "" : " unread"}" href="${escapeAttr(alert.url)}" target="_blank" rel="noopener noreferrer">${content}</a>`
+          : `<div class="alert-entry${alert.read ? "" : " unread"}">${content}</div>`;
+      }).join("")
+    : `<div class="alerts-empty">Aucune alerte enregistrée pour l’instant.</div>`;
 }
 
 function setupImagePreview() {
@@ -243,7 +345,6 @@ async function applyViewMode(compact) {
 
 async function persistSettings({ reschedule = false } = {}) {
   await chrome.storage.local.set({
-    intervalMin: Math.max(30, parseInt($("intervalMin").value || "30", 10)),
     autoRequest: $("autoRequest").checked,
     communityDataEnabled: $("communityDataEnabled").checked,
     trackPokemonTcgFr: $("trackPokemonTcgFr").checked,
@@ -257,9 +358,9 @@ async function persistSettings({ reschedule = false } = {}) {
 }
 
 async function load() {
+  void sendMessage({ type: "reconcile-scheduler" });
   const manifest = chrome.runtime.getManifest?.();
   const cfg = await chrome.storage.local.get([
-    "intervalMin",
     "autoRequest",
     "communityDataEnabled",
     "trackPokemonTcgFr",
@@ -275,7 +376,6 @@ async function load() {
   ]);
 
   $("version").textContent = `Version ${manifest?.version || "?"}`;
-  setVal("intervalMin", Math.max(30, Number(cfg.intervalMin) || 30));
   setChecked("autoRequest", cfg.autoRequest);
   setChecked(
     "communityDataEnabled",
@@ -289,6 +389,7 @@ async function load() {
   renderAutoRequestPrompt(cfg);
   await renderPokemonFeedDate();
   renderAmazonStatus();
+  await renderLocalAlerts();
   setupImagePreview();
 
   await refreshList(cfg.lastRun, cfg.showAll);
@@ -369,6 +470,7 @@ function startProgressListener() {
     if (changes.lastRun || changes.knownStates || changes.publicFeed || changes.customUrls || changes.showAll) {
       chrome.storage.local.get(["lastRun", "showAll"]).then((cfg) => refreshList(cfg.lastRun, cfg.showAll));
     }
+    if (changes.localAlerts) void renderLocalAlerts();
   });
 }
 
@@ -390,6 +492,7 @@ function renderHeader(items, lastRun) {
 }
 
 function shouldHideState(state, showAll) {
+  if (productSearchQuery.trim()) return false;
   if (activeFilter !== "all") return false;
   return !showAll && HIDDEN_BY_DEFAULT.has(state);
 }
@@ -435,14 +538,23 @@ async function rerenderCurrentList(showAllOverride) {
 async function refreshNextCheck() {
   const res = await sendMessage({ type: "get-schedule" });
   if (!res?.ok || !res.schedule?.scheduledTime) {
-    $("next-check").textContent = "Prochain check auto : non planifie";
+    $("next-check").textContent = "Prochaine action auto : non planifiée";
     stopNextCheckTimer();
     return;
   }
-  startNextCheckTimer(res.schedule.scheduledTime);
+  startNextCheckTimer(res.schedule.scheduledTime, res.schedule.reason);
 }
 
-function startNextCheckTimer(scheduledTime) {
+function scheduledActionLabel(reason) {
+  if (reason === "bootstrap_sync" || reason === "wave_feed_sync") return "Prochaine synchronisation";
+  if (reason === "custom_safety") return "Prochain contrôle des liens manuels";
+  if (reason === "new_feed_check") return "Prochain contrôle du nouveau produit";
+  if (reason === "wave_catchup" || reason === "wave_late_catchup") return "Prochain contrôle Amazon (rattrapage)";
+  if (reason === "wave_check") return "Prochain contrôle Amazon";
+  return "Prochaine action auto";
+}
+
+function startNextCheckTimer(scheduledTime, reason = null) {
   stopNextCheckTimer();
   const render = () => {
     const remainingMs = Math.max(0, scheduledTime - Date.now());
@@ -451,7 +563,7 @@ function startNextCheckTimer(scheduledTime) {
       refreshNextCheck().catch(() => {});
       return;
     }
-    $("next-check").textContent = `Prochain check auto dans ${formatCountdown(remainingMs)}`;
+    $("next-check").textContent = `${scheduledActionLabel(reason)} dans ${formatCountdown(remainingMs)}`;
   };
   render();
   nextCheckTimer = setInterval(render, 1000);
@@ -591,6 +703,7 @@ function renderList(items, showAll) {
   let rendered = 0;
 
   for (const item of sorted) {
+    if (!matchesProductSearch(item)) continue;
     const state = item.known_state || "unknown";
     const matchesFilter =
       activeFilter === "all"
@@ -720,7 +833,13 @@ function renderList(items, showAll) {
   }
 
 
-  if (rendered === 0 && hiddenCount > 0) {
+  if (rendered === 0 && productSearchQuery.trim()) {
+    $("empty").innerHTML = `
+      <span class="big">🔎</span>
+      Aucun produit ne correspond à « ${escapeHTML(productSearchQuery.trim())} ».
+    `;
+    renderEmpty(true);
+  } else if (rendered === 0 && hiddenCount > 0) {
     $("empty").innerHTML = `
       <span class="big">🙈</span>
       Tout est masqué pour rester simple.<br />
@@ -734,32 +853,53 @@ function renderList(items, showAll) {
 }
 
 $("toggle-settings").addEventListener("click", () => {
-  $("settings").classList.toggle("open");
+  $("settings").classList.add("open");
+  document.querySelector(".panel").classList.add("settings-mode");
+});
+
+$("close-settings").addEventListener("click", () => {
+  $("settings").classList.remove("open");
+  document.querySelector(".panel").classList.remove("settings-mode");
+});
+
+$("product-search").addEventListener("input", (event) => {
+  productSearchQuery = event.currentTarget.value;
+  $("clear-product-search").hidden = !productSearchQuery;
+  void rerenderCurrentList();
+});
+
+$("clear-product-search").addEventListener("click", () => {
+  productSearchQuery = "";
+  $("product-search").value = "";
+  $("clear-product-search").hidden = true;
+  $("product-search").focus();
+  void rerenderCurrentList();
 });
 
 $("amazon-status").addEventListener("click", () => {
   $("amazon-status-panel").classList.toggle("open");
+  $("alerts-panel").classList.remove("open");
+});
+
+$("alerts-toggle").addEventListener("click", async () => {
+  $("amazon-status-panel").classList.remove("open");
+  const panel = $("alerts-panel");
+  panel.classList.toggle("open");
+  if (panel.classList.contains("open")) {
+    await sendMessage({ type: "mark-local-alerts-read" });
+    await renderLocalAlerts();
+  }
+});
+
+$("clear-alerts").addEventListener("click", async () => {
+  await sendMessage({ type: "clear-local-alerts" });
+  await renderLocalAlerts();
 });
 
 $("toggle-hidden").addEventListener("click", async () => {
   const next = !((await chrome.storage.local.get("showAll")).showAll);
   await chrome.storage.local.set({ showAll: next });
   await rerenderCurrentList(next);
-});
-
-$("intervalMin").addEventListener("input", () => {
-  const invalid = Number($("intervalMin").value) < 30;
-  $("intervalMin").setAttribute("aria-invalid", String(invalid));
-  $("intervalMinError").classList.toggle("visible", invalid);
-});
-
-$("intervalMin").addEventListener("change", async () => {
-  if (Number($("intervalMin").value) < 30) {
-    $("intervalMin").value = "30";
-    $("intervalMin").setAttribute("aria-invalid", "false");
-    $("intervalMinError").classList.add("visible");
-  }
-  await persistSettings({ reschedule: true });
 });
 
 $("autoRequest").addEventListener("change", async () => {
@@ -811,6 +951,9 @@ $("addBtn").addEventListener("click", async () => {
   $("addBtn").disabled = true;
 
   try {
+    if (!(await ensureAmazonBelgiumPermission(url))) {
+      throw new Error("Autorise l’accès à Amazon Belgique pour ajouter ce produit.");
+    }
     const res = await sendMessage({ type: "add-custom-url", url });
     if (!res?.ok) throw new Error(res?.error || "Ajout impossible");
     if (res.added === false) {

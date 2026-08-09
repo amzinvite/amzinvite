@@ -47,7 +47,7 @@ Par défaut, amzinvite suit automatiquement les produits POKÉMON TCG FR via le 
 
 ## Données envoyées à Amazon
 
-Si l'option **Auto-demander** est activée, l'extension peut envoyer la demande d'invitation directement à Amazon France en utilisant la session déjà ouverte dans le navigateur.
+Si l'option **Auto-demander** est activée, l'extension peut envoyer la demande d'invitation directement à Amazon France ou Belgique en utilisant la session déjà ouverte dans le navigateur.
 
 ## Contrôle utilisateur
 

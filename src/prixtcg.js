@@ -16,7 +16,8 @@
     try {
       const url = new URL(rawUrl);
       const host = url.hostname.toLowerCase();
-      const supported = host === "amazon.fr" || host.endsWith(".amazon.fr");
+      const supported = host === "amazon.fr" || host.endsWith(".amazon.fr")
+        || host === "amazon.com.be" || host.endsWith(".amazon.com.be");
       if (!supported) return null;
       const match = url.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/i);
       return match ? match[1].toUpperCase() : null;

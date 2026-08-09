@@ -3,9 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/build.mjs",
     "test": "node scripts/run-tests.mjs",
     "release:check": "node scripts/release-check.mjs",
     "release:pack": "node scripts/release-check.mjs --pack",
     "release:store-status": "node scripts/store-status.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

@@ -21,11 +21,20 @@ import { detectInvitationState, extractBuyboxText } from "./detector.js";
 // ─────────────────────────────────────────────────────────────────────────
 const API_BASE = "https://amzinvite-api.amzinvite.workers.dev";
 const FEED_PATH = "/api/public/invitations";
+const BOOTSTRAP_PATH = "/api/extension/bootstrap";
+const PUBLIC_WAVES_PATH = "/api/public/waves";
+const FEEDBACK_BATCH_PATH = "/api/extension/feedback/batch";
+const WAVE_STATS_URL = "https://prixtcg.fr/amzinvite/stats?source=amzinvite&utm_source=amzinvite&utm_medium=extension&utm_campaign=wave_notification";
 const MARKETPLACES = Object.freeze({
   "amazon.fr": Object.freeze({
     key: "amazon.fr", code: "FR", origin: "https://www.amazon.fr",
     dataHost: "data.amazon.fr", locale: "fr-FR", setting: "trackPokemonTcgFr",
     signInUrl: "https://www.amazon.fr/gp/sign-in.html",
+  }),
+  "amazon.com.be": Object.freeze({
+    key: "amazon.com.be", code: "BE", origin: "https://www.amazon.com.be",
+    dataHost: "data.amazon.com.be", locale: "fr-BE", setting: null,
+    signInUrl: "https://www.amazon.com.be/gp/sign-in.html",
   }),
 });
 const SUPPORTED_MARKETPLACES = Object.keys(MARKETPLACES);
@@ -37,25 +46,54 @@ const AUTH_V2_STORAGE_KEYS = {
 const AUTH_V2_OBSERVATION_ROTATE_AHEAD_MS = 6 * 60 * 60 * 1000;
 const authV2RegistrationPromises = new Map();
 const ALARM_NAME = "invitation-check";
+const WAVE_STATS_ALARM_NAME = "wave-stats-check";
 const OBSERVATION_FLUSH_ALARM_NAME = "observation-flush";
-const DEFAULT_INTERVAL_MIN = 30;
-const MIN_INTERVAL_MIN = 30;
-const PER_REQUEST_DELAY_MS = 8_000;
+const REQUEST_DELAY_MIN_MS = 7_000;
+const REQUEST_DELAY_MAX_MS = 18_000;
+const REQUEST_LONG_PAUSE_MIN_MS = 25_000;
+const REQUEST_LONG_PAUSE_MAX_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 25_000;
 const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
 const ALREADY_REQUESTED_RECHECK_MS = 4 * 60 * 60 * 1000;
-const FEED_REFRESH_MS = 30 * 60 * 1000; // 30 min
+const FEED_REFRESH_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_SMART_SYNC_MIN = 6 * 60;
+const DEFAULT_WAVE_JITTER_MIN = 12;
+const WAVE_SCAN_OFFSETS_MIN = Object.freeze([5, 35, 90, 180, 360, 720, 1380]);
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const BUYABLE_BADGE_BG = "#1D7A52";
 const MAX_NEW_FEED_NOTIFICATIONS = 3;
+const NEW_FEED_CHECK_MIN_MS = 2 * 60 * 1000;
+const NEW_FEED_CHECK_MAX_MS = 10 * 60 * 1000;
 const TELEMETRY_DEDUPE_MS = 60 * 60 * 1000;
 const OBSERVATION_FLUSH_PERIOD_MIN = 5;
 const OBSERVATION_BATCH_SIZE = 100;
 const FEEDBACK_SENT_STORAGE_KEY = "feedbackSentBuckets";
 const OBSERVATION_QUEUE_STORAGE_KEY = "observationQueue";
 const OBSERVATION_SENT_STORAGE_KEY = "observationSentBuckets";
+const LOCAL_ALERTS_STORAGE_KEY = "localAlerts";
+const MAX_LOCAL_ALERTS = 30;
 let instanceIdCreationPromise = null;
+
+function secureRandomInt(min, max) {
+  const lower = Math.ceil(min);
+  const upper = Math.floor(max);
+  if (upper <= lower) return lower;
+  const span = upper - lower + 1;
+  const limit = Math.floor(0x100000000 / span) * span;
+  const values = new Uint32Array(1);
+  do { crypto.getRandomValues(values); } while (values[0] >= limit);
+  return lower + (values[0] % span);
+}
+
+function shuffled(items) {
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index--) {
+    const swapIndex = secureRandomInt(0, index);
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Identifiant d'instance anonyme — généré au premier lancement
@@ -82,7 +120,6 @@ export async function getInstanceId() {
 
 async function getSettings() {
   const cfg = await chrome.storage.local.get([
-    "intervalMin",
     "autoRequest",
     "communityDataEnabled",
     "trackPokemonTcgFr",
@@ -94,7 +131,6 @@ async function getSettings() {
     ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled)
     : !!cfg.communityDataEnabled;
   return {
-    intervalMin: Math.max(MIN_INTERVAL_MIN, Number(cfg.intervalMin) || DEFAULT_INTERVAL_MIN),
     autoRequest: !!cfg.autoRequest,
     communityDataEnabled,
     trackPokemonTcgFr: cfg.trackPokemonTcgFr == null ? true : !!cfg.trackPokemonTcgFr,
@@ -108,6 +144,87 @@ async function hasTrackingSources() {
     chrome.storage.local.get("customUrls"),
   ]);
   return !!trackPokemonTcgFr || (customUrls || []).length > 0;
+}
+
+function parisParts(date) {
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  return Object.fromEntries(parts
+    .filter((part) => part.type !== "literal")
+    .map((part) => [part.type, Number(part.value)]));
+}
+
+function parisDateTimeToEpochMs(year, month, day, hour, minute) {
+  const wallClockUtc = Date.UTC(year, month - 1, day, hour, minute);
+  const initialParts = parisParts(new Date(wallClockUtc));
+  const initialOffset = Date.UTC(
+    initialParts.year, initialParts.month - 1, initialParts.day,
+    initialParts.hour, initialParts.minute, initialParts.second,
+  ) - wallClockUtc;
+  const candidate = wallClockUtc - initialOffset;
+  const corrected = parisParts(new Date(candidate));
+  const correctedOffset = Date.UTC(
+    corrected.year, corrected.month - 1, corrected.day,
+    corrected.hour, corrected.minute, corrected.second,
+  ) - candidate;
+  return wallClockUtc - correctedOffset;
+}
+
+export function fallbackWaveSchedule(nowMs = Date.now()) {
+  const current = parisParts(new Date(nowMs));
+  const parisDayUtc = Date.UTC(current.year, current.month - 1, current.day);
+  const slots = [
+    { weekday: 1, hour: 20, minute: 0 },
+    { weekday: 5, hour: 10, minute: 0 },
+  ];
+  const waves = [];
+  for (let dayOffset = -4; dayOffset <= 10; dayOffset++) {
+    const day = new Date(parisDayUtc + dayOffset * 86400000);
+    for (const slot of slots) {
+      if (day.getUTCDay() !== slot.weekday) continue;
+      const startsAt = parisDateTimeToEpochMs(
+        day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(),
+        slot.hour, slot.minute,
+      );
+      if (startsAt + 3 * 86400000 > nowMs) {
+        waves.push({ id: String(Math.floor(startsAt / 1000)), starts_at: startsAt / 1000, ends_at: startsAt / 1000 + 86400 });
+      }
+    }
+  }
+  return {
+    version: "fallback-2026-08-09",
+    timezone: "Europe/Paris",
+    waves: waves.sort((left, right) => left.starts_at - right.starts_at),
+    scan_offsets_minutes: [...WAVE_SCAN_OFFSETS_MIN],
+    jitter_minutes: DEFAULT_WAVE_JITTER_MIN,
+    sync_interval_minutes: DEFAULT_SMART_SYNC_MIN,
+    custom_interval_minutes: DEFAULT_SMART_SYNC_MIN,
+  };
+}
+
+function normalizedSmartSchedule(value, nowMs = Date.now()) {
+  if (!value || !Array.isArray(value.waves)) return fallbackWaveSchedule(nowMs);
+  return {
+    version: String(value.version || "server"),
+    timezone: value.timezone || "Europe/Paris",
+    waves: value.waves
+      .map((wave) => ({
+        id: String(wave.id || wave.starts_at),
+        starts_at: Number(wave.starts_at),
+        ends_at: Number(wave.ends_at || Number(wave.starts_at) + 86400),
+      }))
+      .filter((wave) => Number.isFinite(wave.starts_at) && Number.isFinite(wave.ends_at)),
+    scan_offsets_minutes: Array.isArray(value.scan_offsets_minutes) && value.scan_offsets_minutes.length
+      ? value.scan_offsets_minutes.map(Number).filter((offset) => offset >= 0 && offset < 1440)
+      : [...WAVE_SCAN_OFFSETS_MIN],
+    jitter_minutes: Math.max(0, Math.min(30, Number(value.jitter_minutes) || DEFAULT_WAVE_JITTER_MIN)),
+    sync_interval_minutes: Math.max(60, Number(value.sync_interval_minutes) || DEFAULT_SMART_SYNC_MIN),
+    custom_interval_minutes: Math.max(60, Number(value.custom_interval_minutes) || DEFAULT_SMART_SYNC_MIN),
+  };
 }
 
 function normalizeAmazonHostname(hostname) {
@@ -127,7 +244,10 @@ function productKey(urlOrMarketplace, maybeAsin = null) {
 }
 
 function selectedMarketplaces(settings) {
-  return SUPPORTED_MARKETPLACES.filter((key) => settings[MARKETPLACES[key].setting]);
+  return SUPPORTED_MARKETPLACES.filter((key) => {
+    const setting = MARKETPLACES[key].setting;
+    return setting && settings[setting];
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -257,6 +377,65 @@ async function refreshPublicFeed() {
   return items;
 }
 
+async function refreshBootstrap() {
+  const { publicFeed: previousFeed, publicFeedFetchedAt } = await chrome.storage.local.get([
+    "publicFeed", "publicFeedFetchedAt",
+  ]);
+  const settings = await getSettings();
+  const marketplaces = selectedMarketplaces(settings);
+  if (!marketplaces.length) {
+    await chrome.storage.local.set({
+      publicFeed: [],
+      publicFeedFetchedAt: Date.now(),
+      smartSchedule: fallbackWaveSchedule(),
+      bootstrapFetchedAt: Date.now(),
+    });
+    return { invitations: [], schedule: fallbackWaveSchedule(), latest_finalized_wave: null };
+  }
+  const query = new URLSearchParams({ marketplaces: marketplaces.join(",") }).toString();
+  const payloadPath = `${BOOTSTRAP_PATH}?${query}`;
+  const timeout = withTimeout();
+  const instanceId = await getInstanceId();
+  const response = await authenticatedFetch(`${API_BASE}${payloadPath}`, {
+    signal: timeout.signal,
+  }, {
+    payload: payloadPath,
+    scope: "instance",
+    instanceId,
+  }).finally(timeout.done);
+  if (!response.ok) throw new Error(`bootstrap HTTP ${response.status}`);
+  const payload = await response.json();
+  if (!payload || !Array.isArray(payload.invitations)) throw new Error("bootstrap invalide");
+  const schedule = normalizedSmartSchedule(payload.schedule);
+  const now = Date.now();
+  await chrome.storage.local.set({
+    publicFeed: payload.invitations,
+    publicFeedFetchedAt: now,
+    bootstrapFetchedAt: now,
+    smartSchedule: schedule,
+    latestFinalizedWave: payload.latest_finalized_wave || null,
+  });
+  await notifyNewPublicFeedItems(previousFeed || [], payload.invitations, { canNotify: !!publicFeedFetchedAt });
+  if (payload.latest_finalized_wave) await notifyFinalizedWave(payload.latest_finalized_wave);
+  await scheduleWaveStatsAlarm(schedule);
+  return { ...payload, schedule };
+}
+
+async function refreshWaveStatus() {
+  const timeout = withTimeout();
+  const response = await fetch(`${API_BASE}${PUBLIC_WAVES_PATH}`, {
+    signal: timeout.signal,
+  }).finally(timeout.done);
+  if (!response.ok) throw new Error(`waves HTTP ${response.status}`);
+  const payload = await response.json();
+  const latest = (payload.waves || []).find((wave) => wave.finalized) || null;
+  if (latest) {
+    await chrome.storage.local.set({ latestFinalizedWave: latest });
+    await notifyFinalizedWave(latest);
+  }
+  return latest;
+}
+
 async function notifyNewPublicFeedItems(previousFeed, nextFeed, { canNotify = true } = {}) {
   if (!canNotify || !Array.isArray(nextFeed) || nextFeed.length === 0) return;
 
@@ -271,6 +450,21 @@ async function notifyNewPublicFeedItems(previousFeed, nextFeed, { canNotify = tr
   });
   if (!freshItems.length) return;
 
+  const { pendingNewFeedUrls, schedulerState } = await chrome.storage.local.get([
+    "pendingNewFeedUrls",
+    "schedulerState",
+  ]);
+  const pending = new Set(pendingNewFeedUrls || []);
+  for (const item of freshItems) pending.add(item.url);
+  const state = { ...(schedulerState || {}) };
+  if (!Number(state.newFeedCheckAt) || Number(state.newFeedCheckAt) <= Date.now()) {
+    state.newFeedCheckAt = Date.now() + secureRandomInt(NEW_FEED_CHECK_MIN_MS, NEW_FEED_CHECK_MAX_MS);
+  }
+  await chrome.storage.local.set({
+    pendingNewFeedUrls: [...pending],
+    schedulerState: state,
+  });
+
   for (const item of freshItems.slice(0, MAX_NEW_FEED_NOTIFICATIONS)) {
     const asin = asinFromUrl(item.url);
     await createProductNotification("feed_new", {
@@ -283,13 +477,16 @@ async function notifyNewPublicFeedItems(previousFeed, nextFeed, { canNotify = tr
 
   const remaining = freshItems.length - MAX_NEW_FEED_NOTIFICATIONS;
   if (remaining > 0) {
+    const title = "Nouveaux liens Amazon dans le feed";
+    const message = `${freshItems.length} nouveaux produits détectés, dont ${remaining} autre(s) non affiché(s).`;
     await chrome.notifications.create(`feed-new-summary-${Date.now()}`, {
       type: "basic",
       iconUrl: "icons/icon128.png",
-      title: "Nouveaux liens Amazon dans le feed",
-      message: `${freshItems.length} nouveaux produits détectés, dont ${remaining} autre(s) non affiché(s).`,
+      title,
+      message,
       priority: 0,
     });
+    await recordLocalAlert({ kind: "feed_new", title, message });
   }
 }
 
@@ -434,7 +631,7 @@ function normalizeAmazonProductUrl(url) {
   }
   const marketplace = normalizeAmazonHostname(parsed.hostname);
   if (!marketplace) {
-    throw new Error("Le lien doit pointer vers Amazon France.");
+    throw new Error("Le lien doit pointer vers Amazon France ou Amazon Belgique.");
   }
   const asin = asinFromUrl(parsed.href);
   if (!asin) {
@@ -533,6 +730,33 @@ function productNotificationId(kind, url) {
   return `product-${kind}-${marketplace}-${asin}-${Date.now()}`;
 }
 
+async function recordLocalAlert({ kind, title, message, url = null }) {
+  const stored = await chrome.storage.local.get(LOCAL_ALERTS_STORAGE_KEY);
+  const alerts = Array.isArray(stored[LOCAL_ALERTS_STORAGE_KEY])
+    ? [...stored[LOCAL_ALERTS_STORAGE_KEY]]
+    : [];
+  const now = Date.now();
+  const dedupeKey = `${kind || "info"}:${url || ""}:${title || ""}`;
+  const duplicateIndex = alerts.findIndex((alert) =>
+    alert.dedupeKey === dedupeKey && now - Number(alert.createdAt || 0) < 60 * 60 * 1000
+  );
+  const entry = {
+    id: duplicateIndex >= 0 ? alerts[duplicateIndex].id : `alert-${now}-${secureRandomInt(1000, 9999)}`,
+    kind: String(kind || "info"),
+    title: String(title || "Alerte amzinvite").slice(0, 160),
+    message: String(message || "").slice(0, 300),
+    url: url ? String(url) : null,
+    createdAt: now,
+    read: false,
+    count: duplicateIndex >= 0 ? Number(alerts[duplicateIndex].count || 1) + 1 : 1,
+    dedupeKey,
+  };
+  if (duplicateIndex >= 0) alerts.splice(duplicateIndex, 1);
+  alerts.unshift(entry);
+  await chrome.storage.local.set({ [LOCAL_ALERTS_STORAGE_KEY]: alerts.slice(0, MAX_LOCAL_ALERTS) });
+  return entry;
+}
+
 async function rememberNotificationUrl(notificationId, url) {
   const { notificationUrls } = await chrome.storage.local.get("notificationUrls");
   const next = { ...(notificationUrls || {}), [notificationId]: url };
@@ -570,6 +794,47 @@ async function createProductNotification(kind, { url, title, message, priority =
     // Les invitations acceptées restent affichées jusqu'à action de l'user.
     requireInteraction: kind === "accepted",
   });
+  await recordLocalAlert({ kind, title, message, url });
+}
+
+export async function notifyFinalizedWave(wave) {
+  if (!wave?.finalized || !wave.id) return { skipped: true };
+  const { lastNotifiedFinalizedWaveId } = await chrome.storage.local.get("lastNotifiedFinalizedWaveId");
+  if (String(lastNotifiedFinalizedWaveId || "") === String(wave.id)) return { deduped: true };
+  const notificationId = `wave-finalized-${wave.id}`;
+  await rememberNotificationUrl(notificationId, WAVE_STATS_URL);
+  const selected = Number(wave.selected_users || 0);
+  const products = Number(wave.products || 0);
+  await chrome.notifications.create(notificationId, {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title: "🌊 Stats de la vague publiées",
+    message: `${selected} sélectionné(s) sur ${products} produit(s) · Voir les résultats`,
+    priority: 1,
+  });
+  await recordLocalAlert({
+    kind: "wave_finalized",
+    title: "🌊 Stats de la vague publiées",
+    message: `${selected} sélectionné(s) sur ${products} produit(s) · Voir les résultats`,
+    url: WAVE_STATS_URL,
+  });
+  await chrome.storage.local.set({ lastNotifiedFinalizedWaveId: String(wave.id) });
+  return { sent: true };
+}
+
+async function scheduleWaveStatsAlarm(scheduleValue = null) {
+  const stored = scheduleValue ? {} : await chrome.storage.local.get("smartSchedule");
+  const schedule = normalizedSmartSchedule(scheduleValue || stored.smartSchedule);
+  const now = Date.now();
+  const candidates = schedule.waves
+    .map((wave) => ({ wave, when: wave.ends_at * 1000 + secureRandomInt(5, 20) * 60000 }))
+    .filter((entry) => entry.when > now)
+    .sort((left, right) => left.when - right.when);
+  if (!candidates.length) {
+    await chrome.alarms.clear(WAVE_STATS_ALARM_NAME);
+    return;
+  }
+  await chrome.alarms.create(WAVE_STATS_ALARM_NAME, { when: candidates[0].when });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -640,6 +905,70 @@ async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeS
   } catch (e) {
     console.warn("[amzinvite] feedback failed:", e);
     return { error: String(e) };
+  }
+}
+
+async function sendFeedbackBatch(items) {
+  const { communityDataEnabled } = await getSettings();
+  if (!communityDataEnabled || !items?.length) return { skipped: true };
+  const now = Date.now();
+  const bucket = Math.floor(now / TELEMETRY_DEDUPE_MS);
+  const stored = await chrome.storage.local.get(FEEDBACK_SENT_STORAGE_KEY);
+  const sentBuckets = stored[FEEDBACK_SENT_STORAGE_KEY] || {};
+  const pending = [];
+  for (const item of items) {
+    const marketplace = marketplaceFromUrl(item.url);
+    const asin = asinFromUrl(item.url);
+    if (!marketplace || !asin) continue;
+    const source = item.source || "bg_check";
+    const dedupeKey = `${bucket}:${marketplace}:${asin.toUpperCase()}:${item.state}:${source}`;
+    if (sentBuckets[dedupeKey]) continue;
+    pending.push({
+      marketplace,
+      asin: asin.toUpperCase(),
+      state: item.state,
+      source,
+      observedAt: Math.floor(now / 1000),
+      dedupeKey,
+      url: item.url,
+    });
+  }
+  if (!pending.length) return { deduped: true };
+  let sentCount = 0;
+  try {
+    const instanceId = await getInstanceId();
+    for (let index = 0; index < pending.length; index += 50) {
+      const chunk = pending.slice(index, index + 50);
+      const body = JSON.stringify({
+        items: chunk.map(({ dedupeKey: _dedupeKey, url: _url, ...item }) => item),
+      });
+      const response = await authenticatedFetch(`${API_BASE}${FEEDBACK_BATCH_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }, {
+        payload: body,
+        scope: "instance",
+        instanceId,
+      });
+      if (!response.ok) throw new Error(`feedback batch HTTP ${response.status}`);
+      sentCount += chunk.length;
+    }
+    const freshBuckets = Object.fromEntries(
+      Object.entries(sentBuckets)
+        .filter(([, timestamp]) => now - Number(timestamp) < 2 * TELEMETRY_DEDUPE_MS)
+        .slice(-500),
+    );
+    for (const item of pending) freshBuckets[item.dedupeKey] = now;
+    await chrome.storage.local.set({ [FEEDBACK_SENT_STORAGE_KEY]: freshBuckets });
+    return { sent: pending.length };
+  } catch (error) {
+    // Compatibilité avec le backend de production tant que la nouvelle route
+    // batch n'est pas déployée : les anciennes routes restent utilisables.
+    for (const item of pending.slice(sentCount)) {
+      await sendFeedback(item.url, item.state, item.source);
+    }
+    return { fallback: true, error: String(error) };
   }
 }
 
@@ -870,19 +1199,194 @@ function isStub(html) {
     || (!/id=["']ppd["']/i.test(html) && !/id=["']centerCol["']/i.test(html));
 }
 
+function isAmazonBlockPage(html) {
+  return /captcha|api-services-support@amazon|automated access|robot check/i.test(String(html || ""));
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Alarmes + keepalive
 // ─────────────────────────────────────────────────────────────────────────
-async function scheduleAlarm() {
+export async function scheduleAlarm({ force = false } = {}) {
   if (!(await hasTrackingSources())) {
     await chrome.alarms.clear(ALARM_NAME);
     return;
   }
-  const { intervalMin } = await getSettings();
-  const jitter = 1 + (Math.random() * 0.4 - 0.2);
-  const period = Math.max(MIN_INTERVAL_MIN, Math.round(intervalMin * jitter));
-  await chrome.alarms.clear(ALARM_NAME);
-  await chrome.alarms.create(ALARM_NAME, { periodInMinutes: period });
+  const existingAlarm = await chrome.alarms.get(ALARM_NAME);
+  if (!force && existingAlarm?.scheduledTime > Date.now() + 15_000) return existingAlarm;
+
+  const stored = await chrome.storage.local.get([
+    "smartSchedule", "schedulerState", "bootstrapFetchedAt", "customUrls", "lastRun", "pendingNewFeedUrls",
+  ]);
+  const now = Date.now();
+  const schedule = normalizedSmartSchedule(stored.smartSchedule, now);
+  const state = stored.schedulerState || {};
+  const completedJobs = { ...(state.completedJobs || {}) };
+  const jobJitter = { ...(state.jobJitter || {}) };
+  const candidates = [];
+  for (const [jobId, completedAt] of Object.entries(completedJobs)) {
+    if (now - Number(completedAt) > 30 * 86400000) {
+      delete completedJobs[jobId];
+      delete jobJitter[jobId];
+    }
+  }
+
+  const syncIntervalMs = schedule.sync_interval_minutes * 60000;
+  const nextSyncAt = Number(stored.bootstrapFetchedAt || 0) + syncIntervalMs;
+  candidates.push({
+    id: "bootstrap-sync",
+    reason: "bootstrap_sync",
+    when: nextSyncAt > now ? nextSyncAt : now + secureRandomInt(30, 120) * 1000,
+  });
+
+  if ((stored.customUrls || []).length) {
+    const customDue = Number(state.lastCustomCheckAt || 0) + schedule.custom_interval_minutes * 60000;
+    candidates.push({
+      id: "custom-safety",
+      reason: "custom_safety",
+      when: customDue > now ? customDue : now + secureRandomInt(60, 180) * 1000,
+    });
+  }
+
+  if ((stored.pendingNewFeedUrls || []).length) {
+    candidates.push({
+      id: "new-feed-check",
+      reason: "new_feed_check",
+      when: Math.max(now + 15_000, Number(state.newFeedCheckAt) || now + NEW_FEED_CHECK_MIN_MS),
+    });
+  }
+
+  for (const wave of schedule.waves) {
+    const startsAt = wave.starts_at * 1000;
+    const endsAt = wave.ends_at * 1000;
+    const syncId = `wave-sync:${wave.id}`;
+    if (!completedJobs[syncId] && startsAt > now) {
+      candidates.push({
+        id: syncId,
+        reason: "wave_feed_sync",
+        waveId: wave.id,
+        when: Math.max(now + 30_000, startsAt - secureRandomInt(10, 20) * 60000),
+      });
+    }
+    for (const offset of schedule.scan_offsets_minutes) {
+      const id = `wave-check:${wave.id}:${offset}`;
+      if (completedJobs[id]) continue;
+      if (jobJitter[id] == null) jobJitter[id] = secureRandomInt(0, schedule.jitter_minutes);
+      const plannedAt = startsAt + (offset + jobJitter[id]) * 60000;
+      if (plannedAt > now) {
+        candidates.push({ id, reason: "wave_check", waveId: wave.id, when: plannedAt });
+      } else if (now < endsAt) {
+        candidates.push({
+          id,
+          reason: "wave_catchup",
+          waveId: wave.id,
+          when: now + secureRandomInt(30, 120) * 1000,
+        });
+      } else {
+        completedJobs[id] = now;
+      }
+    }
+    // Un utilisateur qui rallume Chrome après la clôture reçoit encore un
+    // contrôle de rattrapage unique pendant la fenêtre d'achat potentielle.
+    const lateId = `wave-late:${wave.id}`;
+    if (!completedJobs[lateId] && now >= endsAt && now < endsAt + 2 * 86400000
+        && Number(stored.lastRun?.ts || 0) < startsAt) {
+      candidates.push({
+        id: lateId,
+        reason: "wave_late_catchup",
+        waveId: wave.id,
+        when: now + secureRandomInt(60, 180) * 1000,
+      });
+    }
+  }
+
+  const next = candidates.sort((left, right) => left.when - right.when)[0];
+  if (!next) {
+    await chrome.alarms.clear(ALARM_NAME);
+    return null;
+  }
+  await chrome.storage.local.set({
+    schedulerState: { ...state, completedJobs, jobJitter },
+    schedulerPlan: next,
+    smartSchedule: schedule,
+  });
+  await chrome.alarms.create(ALARM_NAME, { when: next.when });
+  return { scheduledTime: next.when, plan: next };
+}
+
+async function markSchedulerJobsCompleted(plan) {
+  const { schedulerState, smartSchedule } = await chrome.storage.local.get(["schedulerState", "smartSchedule"]);
+  const state = schedulerState || {};
+  const completedJobs = { ...(state.completedJobs || {}) };
+  const now = Date.now();
+  if (plan?.reason?.startsWith("wave_")) {
+    const schedule = normalizedSmartSchedule(smartSchedule, now);
+    const wave = schedule.waves.find((item) => String(item.id) === String(plan.waveId));
+    if (wave) {
+      const startsAt = wave.starts_at * 1000;
+      for (const offset of schedule.scan_offsets_minutes) {
+        const id = `wave-check:${wave.id}:${offset}`;
+        const jitter = Number(state.jobJitter?.[id] || 0);
+        if (startsAt + (offset + jitter) * 60000 <= now) completedJobs[id] = now;
+      }
+    }
+  }
+  if (plan?.id) completedJobs[plan.id] = now;
+  const patch = { ...state, completedJobs };
+  if (plan?.reason === "custom_safety") patch.lastCustomCheckAt = now;
+  await chrome.storage.local.set({ schedulerState: patch });
+}
+
+async function schedulerTick() {
+  const { schedulerPlan, bootstrapFetchedAt, pendingNewFeedUrls } = await chrome.storage.local.get([
+    "schedulerPlan", "bootstrapFetchedAt", "pendingNewFeedUrls",
+  ]);
+  const plan = schedulerPlan || { id: "recovery", reason: "bootstrap_sync" };
+  if (plan.reason === "bootstrap_sync" || plan.reason === "wave_feed_sync") {
+    try { await refreshBootstrap(); }
+    catch (error) {
+      console.warn("[amzinvite] bootstrap fallback:", error);
+      try { await refreshPublicFeed(); } catch (_) {}
+      try { await refreshWaveStatus(); } catch (_) {}
+    }
+  } else if (!bootstrapFetchedAt || Date.now() - bootstrapFetchedAt > FEED_REFRESH_MS) {
+    try { await refreshBootstrap(); }
+    catch (_) { try { await refreshPublicFeed(); } catch (_) {} }
+  }
+
+  if (["wave_check", "wave_catchup", "wave_late_catchup"].includes(plan.reason)) {
+    await runCheck({ scheduled: true });
+  } else if (plan.reason === "new_feed_check") {
+    const result = await runCheck({ scheduled: true, onlyUrls: pendingNewFeedUrls || [] });
+    if (!result.blocked) {
+      const { schedulerState } = await chrome.storage.local.get("schedulerState");
+      const nextState = { ...(schedulerState || {}) };
+      delete nextState.newFeedCheckAt;
+      await chrome.storage.local.set({ pendingNewFeedUrls: [], schedulerState: nextState });
+    } else {
+      const { schedulerState } = await chrome.storage.local.get("schedulerState");
+      await chrome.storage.local.set({
+        schedulerState: {
+          ...(schedulerState || {}),
+          newFeedCheckAt: Date.now() + secureRandomInt(30, 90) * 60000,
+        },
+      });
+    }
+  } else if (plan.reason === "custom_safety") {
+    await runCheck({ scheduled: true, customOnly: true });
+  }
+  await markSchedulerJobsCompleted(plan);
+  await scheduleAlarm({ force: true });
+}
+
+async function reconcileSmartScheduler({ refresh = false, force = false } = {}) {
+  if (refresh) {
+    try { await refreshBootstrap(); }
+    catch (_) {
+      try { await refreshWaveStatus(); } catch (_) {}
+    }
+  }
+  await scheduleWaveStatsAlarm();
+  return scheduleAlarm({ force });
 }
 
 let keepaliveInterval = null;
@@ -929,14 +1433,12 @@ async function setupOriginRewrite() {
 }
 
 async function migrateMarketplaceStorage() {
-  const { marketplaceStorageVersion, knownStates, knownImages, knownExpiry, stateCheckedAt, priceHistory, intervalMin } =
+  await chrome.storage.local.remove("intervalMin");
+  const { marketplaceStorageVersion, knownStates, knownImages, knownExpiry, stateCheckedAt, priceHistory } =
     await chrome.storage.local.get([
-      "marketplaceStorageVersion", "knownStates", "knownImages", "knownExpiry", "stateCheckedAt", "priceHistory", "intervalMin",
+      "marketplaceStorageVersion", "knownStates", "knownImages", "knownExpiry", "stateCheckedAt", "priceHistory",
     ]);
   const patch = {};
-  if (Number(intervalMin) > 0 && Number(intervalMin) < MIN_INTERVAL_MIN) {
-    patch.intervalMin = MIN_INTERVAL_MIN;
-  }
   if (marketplaceStorageVersion < 2) {
     patch.marketplaceStorageVersion = 2;
     for (const [name, values] of Object.entries({ knownStates, knownImages, knownExpiry, stateCheckedAt, priceHistory })) {
@@ -987,7 +1489,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   void setupOriginRewrite();
 
   const existing = await chrome.storage.local.get([
-    "intervalMin",
     "autoRequest",
     "communityDataEnabled",
     "trackPokemonTcgFr",
@@ -996,7 +1497,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     "showAll",
   ]);
   const defaults = {};
-  if (existing.intervalMin == null) defaults.intervalMin = DEFAULT_INTERVAL_MIN;
   if (existing.autoRequest == null) defaults.autoRequest = false;
   if (existing.communityDataEnabled == null) {
     defaults.communityDataEnabled = existing.scrapeEnabled !== false || !!existing.telemetryEnabled;
@@ -1012,6 +1512,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   }
   await updateActionBadge();
+  await reconcileSmartScheduler({ refresh: false, force: true });
 
   // Ouvre la page d'onboarding au premier install
   if (details.reason === "install") {
@@ -1020,7 +1521,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 chrome.runtime.onStartup.addListener(() => {
   void migrateMarketplaceStorage();
-  scheduleAlarm();
+  void reconcileSmartScheduler({ refresh: true });
   scheduleObservationFlush();
   setupOriginRewrite();
   updateActionBadge();
@@ -1028,9 +1529,20 @@ chrome.runtime.onStartup.addListener(() => {
 setupOriginRewrite();
 void scheduleObservationFlush();
 void migrateMarketplaceStorage().then(() => updateActionBadge());
+void scheduleAlarm();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM_NAME) runCheck();
+  if (alarm.name === ALARM_NAME) {
+    void schedulerTick().catch((error) => {
+      console.warn("[amzinvite] scheduler tick failed:", error);
+      void scheduleAlarm({ force: true });
+    });
+  }
+  if (alarm.name === WAVE_STATS_ALARM_NAME) {
+    void refreshBootstrap()
+      .catch(() => refreshWaveStatus())
+      .finally(() => scheduleWaveStatsAlarm());
+  }
   if (alarm.name === OBSERVATION_FLUSH_ALARM_NAME) {
     void flushObservationQueue().catch((e) => console.warn("[amzinvite] observation flush failed:", e));
   }
@@ -1041,7 +1553,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.knownStates || changes.customUrls || changes.trackPokemonTcgFr || changes.publicFeed) {
     void updateActionBadge();
   }
-  if (changes.customUrls || changes.trackPokemonTcgFr || changes.intervalMin) {
+  if (changes.customUrls || changes.trackPokemonTcgFr) {
     void scheduleAlarm();
   }
 });
@@ -1062,6 +1574,29 @@ chrome.notifications.onClosed?.addListener((notificationId) => {
 // Messages depuis popup et content scripts
 // ─────────────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "get-local-alerts") {
+    chrome.storage.local.get(LOCAL_ALERTS_STORAGE_KEY)
+      .then((stored) => sendResponse({
+        ok: true,
+        alerts: Array.isArray(stored[LOCAL_ALERTS_STORAGE_KEY]) ? stored[LOCAL_ALERTS_STORAGE_KEY] : [],
+      }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "mark-local-alerts-read") {
+    chrome.storage.local.get(LOCAL_ALERTS_STORAGE_KEY).then(async (stored) => {
+      const alerts = (stored[LOCAL_ALERTS_STORAGE_KEY] || []).map((alert) => ({ ...alert, read: true }));
+      await chrome.storage.local.set({ [LOCAL_ALERTS_STORAGE_KEY]: alerts });
+      sendResponse({ ok: true });
+    }).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "clear-local-alerts") {
+    chrome.storage.local.set({ [LOCAL_ALERTS_STORAGE_KEY]: [] })
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg?.type === "check-amazon-auth") {
     const requested = Array.isArray(msg.marketplaces) ? msg.marketplaces : [marketplaceFromUrl(sender?.url) || "amazon.fr"];
     Promise.all(requested.filter((key) => MARKETPLACES[key]).map(async (key) => [key, await checkMarketplaceAuth(key)]))
@@ -1101,19 +1636,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "get-schedule") {
-    chrome.alarms.get(ALARM_NAME).then((alarm) => {
+    Promise.all([
+      chrome.alarms.get(ALARM_NAME),
+      chrome.storage.local.get("schedulerPlan"),
+    ]).then(([alarm, stored]) => {
       sendResponse({
         ok: true,
         schedule: {
           scheduledTime: alarm?.scheduledTime || null,
           periodInMinutes: alarm?.periodInMinutes || null,
+          reason: stored.schedulerPlan?.reason || null,
         },
       });
     }).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "reschedule-alarm") {
-    scheduleAlarm().then(() => sendResponse({ ok: true }));
+    scheduleAlarm({ force: true }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg?.type === "reconcile-scheduler") {
+    reconcileSmartScheduler({ refresh: !!msg.refresh })
+      .then((schedule) => sendResponse({ ok: true, schedule }))
+      .catch((error) => sendResponse({ ok: false, error: String(error) }));
     return true;
   }
   if (msg?.type === "refresh-public-feed") {
@@ -1200,6 +1745,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function validateInvitationProductUrl(url) {
   const normalizedUrl = normalizeAmazonProductUrl(url);
+  if (marketplaceFromUrl(normalizedUrl) === "amazon.com.be") {
+    return {
+      normalizedUrl,
+      state: "unknown",
+      name: shortPath(normalizedUrl),
+    };
+  }
   const html = await fetchAmazonPage(normalizedUrl);
   if (isStub(html)) {
     throw new Error("Amazon a renvoye une page incomplete. Reessaie dans quelques secondes.");
@@ -1255,7 +1807,6 @@ async function exportData() {
     exportedAt: new Date().toISOString(),
     customUrls: (customUrls || []).map((entry) => normalizeCustomEntry(entry)),
     settings: {
-      intervalMin: settings.intervalMin,
       autoRequest: settings.autoRequest,
       communityDataEnabled: settings.communityDataEnabled,
       trackPokemonTcgFr: settings.trackPokemonTcgFr,
@@ -1286,7 +1837,6 @@ async function importData(data) {
   // Réglages : appliqués seulement s'ils sont présents dans le fichier.
   const s = data.settings;
   if (s && typeof s === "object") {
-    if (Number.isFinite(s.intervalMin)) patch.intervalMin = Math.max(MIN_INTERVAL_MIN, s.intervalMin);
     if (typeof s.autoRequest === "boolean") patch.autoRequest = s.autoRequest;
     if (typeof s.communityDataEnabled === "boolean") patch.communityDataEnabled = s.communityDataEnabled;
     if (typeof s.trackPokemonTcgFr === "boolean") patch.trackPokemonTcgFr = s.trackPokemonTcgFr;
@@ -1302,18 +1852,19 @@ async function importData(data) {
 // runCheck — boucle principale de vérification des invitations
 // ─────────────────────────────────────────────────────────────────────────
 let activeRun = null;
-async function runCheck({ force = false } = {}) {
+async function runCheck({ force = false, scheduled = false, customOnly = false, onlyUrls = null } = {}) {
   if (activeRun) return activeRun;
   startKeepalive();
-  activeRun = runCheckOnce({ force }).finally(() => {
+  activeRun = runCheckOnce({ force, scheduled, customOnly, onlyUrls }).finally(() => {
     activeRun = null;
     stopKeepalive();
   });
   return activeRun;
 }
 
-async function runCheckOnce({ force = false } = {}) {
+async function runCheckOnce({ force = false, scheduled = false, customOnly = false, onlyUrls = null } = {}) {
   const summary = { checked: 0, errors: 0, items: [] };
+  const feedbackItems = [];
   await chrome.storage.local.set({
     checkProgress: { startedAt: Date.now(), phase: "watchlist", current: 0, total: 0 },
   });
@@ -1327,6 +1878,20 @@ async function runCheckOnce({ force = false } = {}) {
     await chrome.storage.local.remove("checkProgress");
     return summary;
   }
+
+  if (customOnly) {
+    const { customUrls } = await chrome.storage.local.get("customUrls");
+    const customKeys = new Set((customUrls || []).map((item) => productKey(normalizeCustomEntry(item).url)).filter(Boolean));
+    watchlist = watchlist.filter((item) => customKeys.has(productKey(item.url)));
+  }
+  if (Array.isArray(onlyUrls)) {
+    const allowedKeys = new Set(onlyUrls.map((url) => productKey(url)).filter(Boolean));
+    watchlist = watchlist.filter((item) => allowedKeys.has(productKey(item.url)));
+  }
+  if (scheduled) watchlist = shuffled(watchlist);
+
+  let requestsSinceLongPause = 0;
+  let longPauseAfter = secureRandomInt(3, 7);
 
   for (let i = 0; i < watchlist.length; i++) {
     const it = watchlist[i];
@@ -1350,10 +1915,15 @@ async function runCheckOnce({ force = false } = {}) {
       }
 
       const html = await fetchAmazonPage(it.url);
+      if (isAmazonBlockPage(html)) throw new Error("amazon captcha");
       if (isStub(html)) {
         summary.items.push({ url: it.url, state: "stub_no_data" });
         if (i < watchlist.length - 1) {
-          const delay = jitteredDelay(PER_REQUEST_DELAY_MS);
+          const delay = randomInterProductDelay(++requestsSinceLongPause >= longPauseAfter);
+          if (requestsSinceLongPause >= longPauseAfter) {
+            requestsSinceLongPause = 0;
+            longPauseAfter = secureRandomInt(3, 7);
+          }
           await chrome.storage.local.set({
             checkProgress: {
               startedAt: Date.now(),
@@ -1381,7 +1951,7 @@ async function runCheckOnce({ force = false } = {}) {
         await setKnownState(it.url, state);
         await setKnownExpiry(it.url, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
         await markStateChecked(it.url);
-        await sendFeedback(it.url, state, "bg_check");
+        feedbackItems.push({ url: it.url, state, source: "bg_check" });
         summary.checked++;
         summary.items.push({ url: it.url, state });
 
@@ -1395,7 +1965,7 @@ async function runCheckOnce({ force = false } = {}) {
               if (result.ok) {
                 await markAutoSpawned(it.url);
                 await setKnownState(it.url, "already_requested");
-                await sendFeedback(it.url, "already_requested", "auto_request");
+                feedbackItems.push({ url: it.url, state: "already_requested", source: "auto_request" });
                 summary.items[summary.items.length - 1].autoSuccess = true;
                 summary.items[summary.items.length - 1].state = "already_requested";
                 await createProductNotification("auto_request", {
@@ -1437,9 +2007,18 @@ async function runCheckOnce({ force = false } = {}) {
     } catch (e) {
       summary.errors++;
       summary.items.push({ url: it.url, error: String(e) });
+      if (/amazon HTTP (403|429)|captcha/i.test(String(e))) {
+        summary.blocked = true;
+        break;
+      }
     }
     if (i < watchlist.length - 1) {
-      const delay = jitteredDelay(PER_REQUEST_DELAY_MS);
+      const useLongPause = ++requestsSinceLongPause >= longPauseAfter;
+      const delay = randomInterProductDelay(useLongPause);
+      if (useLongPause) {
+        requestsSinceLongPause = 0;
+        longPauseAfter = secureRandomInt(3, 7);
+      }
       await chrome.storage.local.set({
         checkProgress: {
           startedAt: Date.now(),
@@ -1455,6 +2034,7 @@ async function runCheckOnce({ force = false } = {}) {
     }
   }
 
+  await sendFeedbackBatch(feedbackItems);
   await chrome.storage.local.set({ lastRun: { ts: Date.now(), ...summary } });
   await chrome.storage.local.remove("checkProgress");
   await updateActionBadge();
@@ -1462,4 +2042,8 @@ async function runCheckOnce({ force = false } = {}) {
 }
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
-function jitteredDelay(base) { return Math.max(2_000, Math.round(base * (0.75 + Math.random() * 0.5))); }
+function randomInterProductDelay(longPause = false) {
+  return longPause
+    ? secureRandomInt(REQUEST_LONG_PAUSE_MIN_MS, REQUEST_LONG_PAUSE_MAX_MS)
+    : secureRandomInt(REQUEST_DELAY_MIN_MS, REQUEST_DELAY_MAX_MS);
+}

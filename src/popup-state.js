@@ -1,7 +1,7 @@
 (() => {
   const PARIS_TIME_ZONE = "Europe/Paris";
   const ESTIMATED_WAVE_SLOTS = Object.freeze([
-    { weekday: 1, hour: 22, minute: 0, label: "lundi vers 22 h" },
+    { weekday: 1, hour: 20, minute: 0, label: "lundi vers 20 h" },
     { weekday: 5, hour: 10, minute: 0, label: "vendredi vers 10 h" },
   ]);
 

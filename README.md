@@ -1,100 +1,47 @@
 # amzinvite
 
-Extension Chrome qui surveille les produits Amazon en mode invitation et te prévient quand un produit s'ouvre ou quand tu es sélectionné.
+Extension Chrome qui suit les produits Pokémon TCG proposés sur invitation Amazon et t’alerte lorsqu’une invitation est disponible ou acceptée.
 
 [Installer amzinvite depuis le Chrome Web Store](https://chromewebstore.google.com/detail/amzinvite-%E2%80%94-invitations-a/omnadclklfdghknlhgfilpinklhgophe)
 
-### [Découvrir amzinvite sur PrixTCG.fr →](https://prixtcg.fr/amzinvite)
+[Découvrir amzinvite sur PrixTCG.fr →](https://prixtcg.fr/amzinvite)
 
-Retrouve la présentation complète de l’extension et accède au comparateur de prix Pokémon TCG sur PrixTCG.
+## Fonctionnalités
 
-## Ce que fait l'extension
+- suivi automatique des invitations Pokémon TCG sur Amazon France ;
+- ajout manuel de produits Amazon France et Belgique ;
+- surveillance automatique optimisée, avec reprise au redémarrage de Chrome ;
+- notifications lorsqu’une invitation s’ouvre, lorsqu’une demande est envoyée ou lorsque tu es sélectionné ;
+- notification des dernières statistiques disponibles ;
+- auto-demande optionnelle, désactivée par défaut ;
+- recherche par nom, ASIN ou marketplace ;
+- historique local des 30 dernières alertes ;
+- comparaison volontaire des produits sur PrixTCG ;
+- export et import des liens manuels et réglages.
 
-- suit automatiquement les produits POKÉMON TCG en invitation sur Amazon France
-- notifie (et joue un son) quand une invitation devient disponible ou acceptée
-- permet d'ajouter un lien Amazon manuellement à ton suivi local
-- propose une option d'auto-demande, désactivée par défaut
-- permet de désactiver à tout moment le partage anonyme utilisé pour améliorer le service
-- affiche les miniatures produits extraites depuis Amazon
-- indique si ta session Amazon France est connectée
-- scan individuel par produit depuis le popup
-- propose un lien volontaire vers la fiche PrixTCG correspondante pour comparer
-  les prix, sans intégrer de lien affilié Amazon dans l'extension
-- garde un accès discret à PrixTCG sous la liste et dans les réglages
-- propose l’auto-demande une seule fois après le premier check manuel
+Les réglages restent accessibles dans un écran dédié à l’intérieur du popup.
 
-## Installation
+## Installation manuelle
 
-### Depuis le Chrome Web Store
-
-[Installer la version officielle](https://chromewebstore.google.com/detail/amzinvite-%E2%80%94-invitations-a/omnadclklfdghknlhgfilpinklhgophe). Les mises à jour sont ensuite distribuées automatiquement par Chrome.
-
-### En mode développeur
-
-1. Clone le dépôt
-2. Ouvre `chrome://extensions`
-3. Active le mode développeur
-4. Clique sur "Charger l'extension non empaquetée"
-5. Sélectionne le dossier `src/`
-
-## Réglages principaux
-
-| Option | Défaut | Description |
-|---|---|---|
-| Intervalle auto | 30 min | Fréquence de vérification automatique, avec un minimum incompressible de 30 minutes |
-| Son d'alerte | ON | Joue un son quand une invitation s'ouvre ou que tu es sélectionné |
-| Partage anonyme | ON | Aide à améliorer le feed et le catalogue |
-| Suivi POKÉMON TCG FR | ON | Suit automatiquement le feed public ; décocher retire tous les produits du feed |
-| Auto-demander | OFF | Envoie la demande d'invitation automatiquement |
-
-## Suivi et interface
-
-- le suivi automatique POKÉMON TCG FR est actif par défaut ; le décocher vide la liste des produits du feed
-- la session Amazon France est vérifiée avant les contrôles
-- tu peux ajouter un produit manuellement via son lien `amazon.fr` (conservé même si tu désactives le feed)
-- tu peux exporter ta watchlist + tes réglages dans un fichier JSON et les réimporter (sauvegarde / changement de machine)
-- l'item en cours de vérification remonte en tête de liste avec une barre de progression, un compte à rebours et un ETA global
-- un bouton de scan individuel permet de relancer un check unitaire sur n'importe quel produit
-- les miniatures sont extraites automatiquement lors des checks et mises en cache localement
-- « Comparer sur PrixTCG » ouvre une fiche PrixTCG avec la provenance
-  `amzinvite`; les liens marchands restent ensuite gérés par le site PrixTCG
-- l'intervalle de contrôle est réglable à partir de 30 minutes, jamais en dessous
-- si le partage anonyme est activé, les pages produit consultées volontairement
-  sur Amazon peuvent aider à actualiser les prix et disponibilités du catalogue
-
-## PrixTCG et liens sortants
-
-- amzinvite n'intègre pas de lien affilié Amazon
-- les liens « Comparer sur PrixTCG » sont toujours déclenchés volontairement par l'utilisateur
-- l'ASIN sert uniquement à retrouver la fiche correspondante sur PrixTCG
-- la provenance `amzinvite` permet de mesurer l'utilité de l'extension sans transmettre l'identité de l'utilisateur
-- aucun produit supplémentaire n'est attribué ou contrôlé pour PrixTCG en arrière-plan
-- une fois sur PrixTCG, les éventuels liens marchands et leur transparence sont gérés par PrixTCG
+1. Clone le dépôt.
+2. Ouvre `chrome://extensions`.
+3. Active le mode développeur.
+4. Clique sur « Charger l’extension non empaquetée ».
+5. Sélectionne le dossier `src/`.
 
 ## Confidentialité
 
-- aucun compte requis
-- données locales conservées dans le navigateur
-- partage anonyme désactivable à tout moment
-- reset complet possible depuis le popup
+- aucun compte amzinvite requis ;
+- données et historique d’alertes conservés localement dans Chrome ;
+- partage communautaire anonyme désactivable à tout moment ;
+- aucune transmission des cookies ou de l’identité Amazon ;
+- aucun lien affilié Amazon intégré à l’extension.
 
 Voir [PRIVACY.md](./PRIVACY.md).
 
-## Structure
-
-- `src/background.js` : logique principale (checks, watchlist, feed, notifications)
-- `src/popup.html` et `src/popup.js` : interface du popup
-- `src/prixtcg.js` : construction des liens explicites vers le comparateur
-- `src/onboarding.html` : écran de bienvenue
-- `src/content.js` : détection d'état sur les pages produit Amazon
-- `src/detector.js` : logique de détection des états invitation
-- `src/amazon-dom.js` : extraction des données produit depuis le DOM Amazon
-- `src/scrape-amazon-product.js` : scraping des pages produit
-- `src/scrape-amazon-listing.js` : scraping des pages listing
-
 ## Avertissement
 
-amzinvite n'est pas affilié à Amazon. L'option d'auto-demande peut être contraire aux conditions d'utilisation d'Amazon. Utilisation à tes risques.
+amzinvite n’est pas affilié à Amazon. L’auto-demande est optionnelle et son utilisation reste sous ta responsabilité.
 
 ## Licence
 

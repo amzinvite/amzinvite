@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const root = new URL("../", import.meta.url);
@@ -36,11 +36,11 @@ for (const file of readdirSync(fixtureDir).filter((name) => name.endsWith(".html
 }
 
 if (process.argv.includes("--pack")) {
+  run(process.execPath, ["scripts/build.mjs"]);
   const dist = new URL("../dist/", import.meta.url);
-  mkdirSync(dist, { recursive: true });
   const archive = new URL(`amzinvite-v${manifest.version}.zip`, dist);
   rmSync(archive, { force: true });
-  run("zip", ["-qr", archive.pathname, ".", "-x", ".DS_Store", "*/.DS_Store"], new URL("../src/", import.meta.url));
+  run("zip", ["-qr", archive.pathname, ".", "-x", ".DS_Store", "*/.DS_Store", "*.zip"], dist);
   console.log(`\n✓ Archive créée : dist/amzinvite-v${manifest.version}.zip`);
 } else {
   console.log("\n✓ Contrôle de release réussi (utilise npm run release:pack pour créer le ZIP)");

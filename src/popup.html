@@ -69,6 +69,72 @@
         justify-content: space-between;
         gap: 10px;
       }
+      .hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .alerts-toggle {
+        position: relative;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 999px;
+        font-size: 15px;
+      }
+      .alerts-dot {
+        position: absolute;
+        top: 2px;
+        right: 1px;
+        min-width: 14px;
+        height: 14px;
+        padding: 0 3px;
+        border: 2px solid var(--surface-strong);
+        border-radius: 999px;
+        background: var(--red);
+        color: white;
+        font-size: 8px;
+        font-weight: 900;
+        line-height: 10px;
+      }
+      .alerts-panel {
+        display: none;
+        position: absolute;
+        top: 52px;
+        right: 12px;
+        z-index: 30;
+        width: min(340px, calc(100% - 24px));
+        max-height: 390px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface-strong);
+        box-shadow: 0 12px 34px rgba(0,0,0,.18);
+      }
+      .alerts-panel.open { display: flex; flex-direction: column; }
+      .alerts-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .alerts-list { overflow-y: auto; }
+      .alert-entry {
+        display: grid;
+        grid-template-columns: 24px 1fr;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        text-decoration: none;
+      }
+      .alert-entry.unread { background: color-mix(in srgb, var(--brand) 7%, var(--surface-strong)); }
+      .alert-entry-title { font-size: 11px; font-weight: 800; }
+      .alert-entry-message { margin-top: 2px; color: var(--text-soft); font-size: 10.5px; line-height: 1.35; }
+      .alert-entry-meta { margin-top: 4px; color: var(--muted); font-size: 9px; }
+      .alerts-empty { padding: 24px 12px; color: var(--muted); font-size: 11px; text-align: center; }
       .brand {
         display: flex;
         align-items: center;
@@ -311,6 +377,24 @@
       .collapse-target.open {
         display: block;
       }
+      .settings-page-head {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-strong);
+      }
+      .settings-page-head h2 { margin: 0; font-size: 15px; }
+      .settings-mode .fixed-header,
+      .settings-mode #amazon-warn,
+      .settings-mode .list-header,
+      .settings-mode #list,
+      .settings-mode #empty,
+      .settings-mode .fixed-footer { display: none !important; }
+      .settings-mode .content-scroll { overflow-y: auto; }
+      .settings-mode #settings { display: block; border-top: 0; }
+      .settings-mode .settings-page-head { display: flex; }
       .stack {
         display: grid;
         gap: 12px;
@@ -538,8 +622,39 @@
         gap: 12px;
         padding: 16px;
       }
-      .list-header:has(#toggle-hidden[hidden]) {
-        display: none;
+      .product-search-wrap {
+        position: relative;
+        flex: 1;
+      }
+      .product-search-wrap input[type="search"] {
+        width: 100%;
+        min-height: 36px;
+        padding: 8px 34px 8px 12px;
+        border: 1px solid var(--border-strong);
+        border-radius: 12px;
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+      }
+      .product-search-wrap input[type="search"]:focus {
+        outline: none;
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 12%, transparent);
+      }
+      .clear-product-search {
+        position: absolute;
+        top: 50%;
+        right: 5px;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        transform: translateY(-50%);
+      }
+      .clear-product-search:hover {
+        transform: translateY(-50%);
       }
       .list-title {
         margin: 0;
@@ -1017,8 +1132,15 @@
                 <div class="meta" id="version">Version —</div>
               </div>
             </div>
-            <div class="eyebrow" id="amazon-status">●</div>
+            <div class="hero-actions">
+              <div class="eyebrow" id="amazon-status">●</div>
+              <button class="alerts-toggle" id="alerts-toggle" type="button" aria-label="Ouvrir les alertes" title="Alertes">🔔<span class="alerts-dot" id="alerts-dot" hidden></span></button>
+            </div>
             <div id="amazon-status-panel" class="amazon-status-panel"></div>
+            <div id="alerts-panel" class="alerts-panel">
+              <div class="alerts-panel-head"><span>Dernières alertes</span><button class="text-button" id="clear-alerts" type="button">Effacer</button></div>
+              <div class="alerts-list" id="alerts-list"></div>
+            </div>
           </div>
           <div class="sub" id="sub">Chargement de ton suivi…</div>
         </div>
@@ -1030,7 +1152,7 @@
         </div>
 
         <div class="status-wrap">
-          <div class="status-line" id="next-check">Prochain check auto : —</div>
+          <div class="status-line" id="next-check">Prochaine action automatique : —</div>
           <div class="wave-countdown" id="wave-countdown">
             <span class="wave-countdown-icon" aria-hidden="true">🌊</span>
             <span class="wave-countdown-main" id="wave-countdown-main">Prochaine vague estimée : —</span>
@@ -1061,30 +1183,28 @@
 
         <div class="content-scroll">
         <div class="collapse-target" id="settings">
+          <div class="settings-page-head">
+            <button class="ghost" id="close-settings" type="button" aria-label="Retour au suivi" title="Retour">←</button>
+            <h2>Réglages</h2>
+          </div>
           <div class="section">
             <div class="stack">
               <div class="card">
                 <p class="card-title">Ajouter un lien Amazon</p>
                 <p class="card-copy">
-                  On vérifie qu’il s’agit bien d’un produit en mode invitation avant de l’ajouter à ton suivi local.
+                  Liens Amazon France et Belgique. Le mode invitation est vérifié avant l’ajout en France ; les liens belges sont ajoutés avec le statut « À vérifier ».
                 </p>
                 <div style="height:10px"></div>
                 <label class="field" for="addUrl">Lien produit</label>
                 <div class="inline-form">
-                  <input id="addUrl" type="url" placeholder="https://www.amazon.fr/dp/B0XXXXXXXX" />
+                  <input id="addUrl" type="url" placeholder="https://www.amazon.fr ou amazon.com.be/dp/…" />
                   <button class="primary" id="addBtn">Ajouter</button>
                 </div>
               </div>
 
               <div class="card">
-                <div class="inline-field">
-                  <div>
-                    <label class="field" for="intervalMin">Intervalle auto</label>
-                    <p class="card-copy">Toutes les combien de minutes on refait un check. Minimum 30 minutes.</p>
-                    <p class="field-error" id="intervalMinError" role="alert">Minimum 30 minutes pour protéger ton compte et limiter les requêtes Amazon.</p>
-                  </div>
-                  <input id="intervalMin" type="number" min="30" step="5" placeholder="30" aria-describedby="intervalMinError" />
-                </div>
+                <p class="card-title">Surveillance intelligente</p>
+                <p class="card-copy">Les contrôles Amazon sont répartis aléatoirement après chaque vague, avec rattrapage au prochain démarrage de Chrome.</p>
               </div>
 
               <a class="prixtcg-settings-link" href="https://prixtcg.fr/pokemon/catalogue?source=amzinvite&amp;utm_source=amzinvite&amp;utm_medium=extension&amp;utm_campaign=popup" target="_blank" rel="noopener noreferrer" title="Ouvrir le comparateur PrixTCG">
@@ -1158,6 +1278,10 @@
         </div>
 
         <div class="list-header">
+          <div class="product-search-wrap">
+            <input id="product-search" type="search" placeholder="Rechercher un produit ou un ASIN…" aria-label="Rechercher dans les produits suivis" autocomplete="off" />
+            <button class="clear-product-search" id="clear-product-search" type="button" aria-label="Effacer la recherche" title="Effacer" hidden>×</button>
+          </div>
           <button class="text-button" id="toggle-hidden" type="button" hidden>Afficher tout</button>
         </div>
         <ul class="products" id="list"></ul>

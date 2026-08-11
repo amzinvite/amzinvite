@@ -178,7 +178,7 @@ export function fallbackWaveSchedule(nowMs = Date.now()) {
   const current = parisParts(new Date(nowMs));
   const parisDayUtc = Date.UTC(current.year, current.month - 1, current.day);
   const slots = [
-    { weekday: 1, hour: 20, minute: 0 },
+    { weekday: 1, hour: 22, minute: 0 },
     { weekday: 5, hour: 10, minute: 0 },
   ];
   const waves = [];
@@ -196,7 +196,7 @@ export function fallbackWaveSchedule(nowMs = Date.now()) {
     }
   }
   return {
-    version: "fallback-2026-08-11",
+    version: "fallback-2026-08-11.2",
     timezone: "Europe/Paris",
     waves: waves.sort((left, right) => left.starts_at - right.starts_at),
     scan_offsets_minutes: [...WAVE_SCAN_OFFSETS_MIN],

@@ -120,7 +120,8 @@ console.log("\nscheduler intelligent :");
 
 await test("le calendrier de secours ne lance des checks qu'après le début des vagues", async () => {
   const schedule = backgroundModule.fallbackWaveSchedule(Date.parse("2026-08-09T12:00:00Z"));
-  assert.deepEqual(schedule.scan_offsets_minutes, [5, 35, 90, 180, 360, 720, 1380]);
+  assert.deepEqual(schedule.scan_offsets_minutes, [5, 20, 35, 50, 65, 80, 95, 110, 125, 150, 180, 360, 720, 1380]);
+  assert.equal(schedule.jitter_minutes, 4);
   assert.ok(schedule.scan_offsets_minutes.every((offset) => offset > 0));
   assert.ok(schedule.waves.some((wave) => new Date(wave.starts_at * 1000).toISOString() === "2026-08-10T18:00:00.000Z"));
 });

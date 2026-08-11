@@ -57,8 +57,8 @@ const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
 const ALREADY_REQUESTED_RECHECK_MS = 4 * 60 * 60 * 1000;
 const FEED_REFRESH_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_SMART_SYNC_MIN = 6 * 60;
-const DEFAULT_WAVE_JITTER_MIN = 12;
-const WAVE_SCAN_OFFSETS_MIN = Object.freeze([5, 35, 90, 180, 360, 720, 1380]);
+const DEFAULT_WAVE_JITTER_MIN = 4;
+const WAVE_SCAN_OFFSETS_MIN = Object.freeze([5, 20, 35, 50, 65, 80, 95, 110, 125, 150, 180, 360, 720, 1380]);
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const BUYABLE_BADGE_BG = "#1D7A52";
@@ -196,7 +196,7 @@ export function fallbackWaveSchedule(nowMs = Date.now()) {
     }
   }
   return {
-    version: "fallback-2026-08-09",
+    version: "fallback-2026-08-11",
     timezone: "Europe/Paris",
     waves: waves.sort((left, right) => left.starts_at - right.starts_at),
     scan_offsets_minutes: [...WAVE_SCAN_OFFSETS_MIN],

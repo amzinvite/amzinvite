@@ -8,6 +8,8 @@
 - Autorise l’ajout manuel de liens produits Amazon Belgique (`amazon.com.be`).
 - Planifie le contrôle d’un nouveau produit du feed 2 à 10 minutes après sa découverte, sans rescanner toute la liste.
 - Remplace l'intervalle manuel par des contrôles ponctuels et aléatoires après le début de chaque vague.
+- Aligne le créneau du lundi sur 22 h (Europe/Paris) et conserve celui du vendredi à 10 h.
+- Rapproche les contrôles pendant les trois premières heures afin de détecter rapidement un déclenchement Amazon décalé.
 - Couvre la fenêtre de 24 h avec rattrapage au prochain démarrage de Chrome.
 - Notifie une seule fois la publication des statistiques finalisées, y compris après un démarrage tardif.
 - Groupe les feedbacks d'un cycle afin de réduire les appels au Worker.

@@ -285,7 +285,7 @@ async function renderLocalAlerts() {
   $("clear-alerts").hidden = alerts.length === 0;
   $("alerts-list").innerHTML = alerts.length
     ? alerts.map((alert) => {
-        const content = `<span>${alertIcon(alert.kind)}</span><span><span class="alert-entry-title">${escapeHTML(alert.title)}${Number(alert.count || 1) > 1 ? ` ×${Number(alert.count)}` : ""}</span><span class="alert-entry-message">${escapeHTML(alert.message)}</span><span class="alert-entry-meta">${relativeTime(Number(alert.createdAt || Date.now()))}</span></span>`;
+        const content = `<span class="alert-entry-icon">${alertIcon(alert.kind)}</span><span class="alert-entry-content"><span class="alert-entry-title">${escapeHTML(alert.title)}${Number(alert.count || 1) > 1 ? ` ×${Number(alert.count)}` : ""}</span><span class="alert-entry-message">${escapeHTML(alert.message)}</span><span class="alert-entry-meta">${relativeTime(Number(alert.createdAt || Date.now()))}</span></span>`;
         return alert.url
           ? `<a class="alert-entry${alert.read ? "" : " unread"}" href="${escapeAttr(alert.url)}" target="_blank" rel="noopener noreferrer">${content}</a>`
           : `<div class="alert-entry${alert.read ? "" : " unread"}">${content}</div>`;

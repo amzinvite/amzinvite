@@ -125,15 +125,17 @@
       .alert-entry {
         display: grid;
         grid-template-columns: 24px 1fr;
-        gap: 8px;
+        gap: 12px;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
         text-decoration: none;
       }
       .alert-entry.unread { background: color-mix(in srgb, var(--brand) 7%, var(--surface-strong)); }
+      .alert-entry-icon { padding-top: 1px; }
+      .alert-entry-content { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
       .alert-entry-title { font-size: 11px; font-weight: 800; }
-      .alert-entry-message { margin-top: 2px; color: var(--text-soft); font-size: 10.5px; line-height: 1.35; }
-      .alert-entry-meta { margin-top: 4px; color: var(--muted); font-size: 9px; }
+      .alert-entry-message { color: var(--text-soft); font-size: 10.5px; line-height: 1.35; }
+      .alert-entry-meta { color: var(--muted); font-size: 9px; }
       .alerts-empty { padding: 24px 12px; color: var(--muted); font-size: 11px; text-align: center; }
       .brand {
         display: flex;

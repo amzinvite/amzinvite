@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.33] — lisibilité de l’historique
+
+### Fixes
+- Ajoute un espacement net entre l’icône de l’événement et le titre dans l’historique des alertes.
+- Structure le titre, le message et l’horodatage en colonne pour éviter leur collage visuel.
+
 ## [0.1.32] — surveillance intelligente des vagues
 
 ### Features

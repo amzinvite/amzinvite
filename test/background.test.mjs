@@ -71,7 +71,7 @@ const defaultFetch = async (url, options = {}) => {
           ? "00000000-0000-4000-8000-000000000001"
           : "00000000-0000-4000-8000-000000000002",
         secret: "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
-        expiresAt: scope === "observations" ? Date.now() + 48 * 60 * 60 * 1000 : null,
+        expiresAt: null,
       }),
     };
   }
@@ -400,74 +400,6 @@ await test("ré-enrôle automatiquement un credential v2 refusé", async () => {
   assert.equal(res.ok, true);
   assert.equal(calls.length, 3);
   assert.equal(calls[2].options.headers["X-Credential-Id"], "44444444-4444-4444-8444-444444444444");
-});
-
-await test("transmet passivement les observations des pages Amazon visitées", async () => {
-  const calls = [];
-  globalThis.fetch = async (url, options = {}) => {
-    calls.push({ url, options });
-    if (url.endsWith("/api/extension/register")) {
-      return {
-        ok: true,
-        status: 201,
-        json: async () => ({
-          scope: "observations",
-          credentialId: "55555555-5555-4555-8555-555555555555",
-          secret: "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
-          expiresAt: Date.now() + 48 * 60 * 60 * 1000,
-        }),
-      };
-    }
-    return { ok: true, status: 200, json: async () => ({ ok: true }) };
-  };
-
-  const res = await dispatch({
-    type: "scrape-items",
-    items: [{
-      asin: "B0ABCDEF01",
-      marketplace: "amazon.fr",
-      price: 39.99,
-      in_stock: true,
-      stock_status: "in_stock",
-    }],
-  });
-  assert.equal(res.ok, true);
-  assert.equal(res.queued, 1);
-  assert.equal(calls.length, 0);
-
-  const duplicate = await dispatch({
-    type: "scrape-items",
-    items: [{
-      asin: "B0ABCDEF01",
-      marketplace: "amazon.fr",
-      price: 39.99,
-      in_stock: true,
-      stock_status: "in_stock",
-    }],
-  });
-  assert.equal(duplicate.deduped, 1);
-
-  const flushed = await dispatch({ type: "flush-observations" });
-  assert.equal(flushed.ok, true);
-  assert.equal(flushed.sent, 1);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].options.headers["X-Auth-Version"], "2");
-  assert.equal(calls[1].options.headers["X-Instance-Id"], undefined);
-  assert.equal(store.authV2ObservationCredential.scope, "observations");
-  assert.deepEqual(store.observationQueue, {});
-
-  const alreadySent = await dispatch({
-    type: "scrape-items",
-    items: [{
-      asin: "B0ABCDEF01",
-      marketplace: "amazon.fr",
-      price: 39.99,
-      in_stock: true,
-      stock_status: "in_stock",
-    }],
-  });
-  assert.equal(alreadySent.deduped, 1);
-  assert.equal(calls.length, 2);
 });
 
 await test("ne contrôle aucun produit absent de la watchlist", async () => {

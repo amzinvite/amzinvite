@@ -769,7 +769,6 @@ function renderList(items, showAll) {
           ${newTag}<span class="marketplace-badge">${marketplaceFromItem(item)}</span>
           <div class="name" title="${escapeAttr(item.name || asin || item.url)}">${escapeHTML(item.name || asin || item.url)}</div>
         </div>
-        <span class="price-tag" data-asin="${escapeAttr(asin || "")}" data-marketplace="${escapeAttr(item.marketplace || new URL(item.url).hostname.replace(/^www\./, ""))}"></span>
         <div class="product-links">
           <span class="link"><a href="${escapeAttr(item.url)}" target="_blank" rel="noopener"><svg class="link-icon" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 1h3v3M11 1 6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>${escapeHTML(asin || shortPath(item.url))}</a></span>
           ${prixtcgTag}
@@ -784,17 +783,6 @@ function renderList(items, showAll) {
     list.appendChild(li);
     rendered++;
   }
-
-  // Remplir les prix de façon asynchrone
-  list.querySelectorAll(".price-tag[data-asin]").forEach(async (el) => {
-    const asin = el.dataset.asin;
-    const marketplace = el.dataset.marketplace;
-    if (!asin) return;
-    const res = await sendMessage({ type: "get-price", marketplace, asin });
-    if (res?.entry?.price != null) {
-      el.textContent = `${Number(res.entry.price).toFixed(2)} €`;
-    }
-  });
 
   list.querySelectorAll(".scan-single").forEach((btn) => {
     btn.addEventListener("click", async (e) => {

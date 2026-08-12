@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "amzinvite — Invitations Amazon Pokémon TCG",
-  "version": "0.1.33",
+  "version": "0.1.34",
   "description": "Ne ratez plus les ETB et coffrets Pokémon TCG disponibles sur invitation Amazon : surveillance auto, alertes et demande en un clic.",
   "permissions": [
     "alarms",
@@ -53,24 +53,7 @@
         "*://*.amazon.com/gp/product/*"
       ],
       "js": [
-        "amazon-dom.js",
-        "content.js",
-        "scrape-amazon-product.js"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "*://*.amazon.fr/s*",
-        "*://*.amazon.com.be/s*",
-        "*://*.amazon.com/s*",
-        "*://*.amazon.fr/stores/page/*",
-        "*://*.amazon.com.be/stores/page/*",
-        "*://*.amazon.com/stores/page/*"
-      ],
-      "js": [
-        "amazon-dom.js",
-        "scrape-amazon-listing.js"
+        "content.js"
       ],
       "run_at": "document_idle"
     }

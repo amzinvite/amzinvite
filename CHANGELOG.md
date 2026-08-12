@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.34] — arrêt du scraping Amazon passif
+
+### Privacy
+- Supprime l’analyse silencieuse des pages de recherche et boutiques Amazon.
+- Supprime la collecte passive des noms, prix, stocks et images pendant la navigation.
+- Supprime la file locale, l’alarme et le credential dédiés aux observations.
+
+### Maintenu
+- Conserve la détection des invitations sur les fiches produit suivies, les contrôles programmés, l’auto-demande, les notifications et les statistiques de vague.
+
 ## [0.1.33] — lisibilité de l’historique
 
 ### Fixes

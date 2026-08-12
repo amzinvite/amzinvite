@@ -1,6 +1,6 @@
 # Privacy Policy — amzinvite
 
-**Dernière mise à jour :** 2026-08-02
+**Dernière mise à jour :** 2026-08-12
 
 amzinvite est conçu pour fonctionner avec un minimum de données.
 
@@ -9,8 +9,7 @@ amzinvite est conçu pour fonctionner avec un minimum de données.
 Les informations suivantes restent dans le navigateur :
 
 - `instanceId` : identifiant anonyme généré localement
-- des credentials d'authentification aléatoires : un lié à l'instance et un
-  credential court distinct pour les observations anonymes
+- un credential d'authentification aléatoire lié à l'instance anonyme
 - `intervalMin`, `autoRequest`, `communityDataEnabled`, `trackPokemonTcgFr` : préférences de l'extension
 - `customUrls` : liens Amazon ajoutés manuellement
 - `knownStates` : états détectés pour les produits suivis
@@ -28,12 +27,10 @@ L'extension récupère la liste publique des produits en mode invitation.
 
 Quand l'option de partage anonyme est activée, l'extension peut envoyer :
 
-- des détections d'état d'invitation
-- les prix et disponibilités détectés sur les pages Amazon que l'utilisateur
-  consulte volontairement
+- des changements d'état des invitations suivies
 
-L'extension ne reçoit aucun produit supplémentaire à contrôler pour PrixTCG et
-n'analyse que les pages Amazon effectivement consultées par l'utilisateur.
+L'extension n'analyse pas silencieusement les pages de recherche Amazon et ne
+collecte pas les prix, disponibilités, images ou noms des pages consultées.
 
 Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent pas de nom, d'email ou d'informations de paiement.
 

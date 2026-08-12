@@ -6,13 +6,10 @@
 //   2. ÉTAT         : 100% local (chrome.storage.local), aucune donnée perso
 //                     ne quitte le navigateur de l'user
 //   3. DONNEES ANONYMES : opt-out via toggle settings. Si activé, envoie
-//                     des détections anonymes et des observations Amazon
-//                     pour améliorer le feed et le catalogue
+//                     les changements d'état des invitations suivies afin
+//                     d'améliorer le feed et les statistiques de vague
 //   4. AUTO-REQUEST : opt-in avec disclaimer. POST direct à l'endpoint
 //                     d'invitation Amazon. Aucune fenêtre ouverte, aucun clic
-//   5. SCRAPING     : les content scripts peuvent envoyer les ASINs/prix/stocks
-//                     observés lorsque l'utilisateur navigue sur Amazon et que
-//                     le partage anonyme est activé. Aucun job n'est distribué.
 
 import { detectInvitationState, extractBuyboxText } from "./detector.js";
 
@@ -41,13 +38,10 @@ const SUPPORTED_MARKETPLACES = Object.keys(MARKETPLACES);
 const AUTH_REGISTER_PATH = "/api/extension/register";
 const AUTH_V2_STORAGE_KEYS = {
   instance: "authV2InstanceCredential",
-  observations: "authV2ObservationCredential",
 };
-const AUTH_V2_OBSERVATION_ROTATE_AHEAD_MS = 6 * 60 * 60 * 1000;
 const authV2RegistrationPromises = new Map();
 const ALARM_NAME = "invitation-check";
 const WAVE_STATS_ALARM_NAME = "wave-stats-check";
-const OBSERVATION_FLUSH_ALARM_NAME = "observation-flush";
 const REQUEST_DELAY_MIN_MS = 7_000;
 const REQUEST_DELAY_MAX_MS = 18_000;
 const REQUEST_LONG_PAUSE_MIN_MS = 25_000;
@@ -66,11 +60,7 @@ const MAX_NEW_FEED_NOTIFICATIONS = 3;
 const NEW_FEED_CHECK_MIN_MS = 2 * 60 * 1000;
 const NEW_FEED_CHECK_MAX_MS = 10 * 60 * 1000;
 const TELEMETRY_DEDUPE_MS = 60 * 60 * 1000;
-const OBSERVATION_FLUSH_PERIOD_MIN = 5;
-const OBSERVATION_BATCH_SIZE = 100;
 const FEEDBACK_SENT_STORAGE_KEY = "feedbackSentBuckets";
-const OBSERVATION_QUEUE_STORAGE_KEY = "observationQueue";
-const OBSERVATION_SENT_STORAGE_KEY = "observationSentBuckets";
 const LOCAL_ALERTS_STORAGE_KEY = "localAlerts";
 const MAX_LOCAL_ALERTS = 30;
 let instanceIdCreationPromise = null;
@@ -251,9 +241,7 @@ function selectedMarketplaces(settings) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Authentification v2 — secret aléatoire propre à l'installation. Les
-// observations utilisent un credential séparé et court afin de ne pas les
-// rattacher durablement à l'instance.
+// Authentification v2 — secret aléatoire propre à l'installation.
 // ─────────────────────────────────────────────────────────────────────────
 async function hmacSign(payload, timestamp, secret) {
   const enc = new TextEncoder();
@@ -274,14 +262,11 @@ function isUsableV2Credential(value, scope) {
   if (!value || value.scope !== scope) return false;
   if (!/^[0-9a-f-]{36}$/i.test(value.credentialId || "")) return false;
   if (!/^[A-Za-z0-9_-]{40,64}$/.test(value.secret || "")) return false;
-  if (scope === "observations") {
-    return Number(value.expiresAt || 0) - AUTH_V2_OBSERVATION_ROTATE_AHEAD_MS > Date.now();
-  }
   return true;
 }
 
 async function registerV2Credential(scope, instanceId = null) {
-  const body = JSON.stringify(scope === "instance" ? { scope, instanceId } : { scope });
+  const body = JSON.stringify({ scope, instanceId });
   const timeout = withTimeout();
   const response = await fetch(`${API_BASE}${AUTH_REGISTER_PATH}`, {
     method: "POST",
@@ -973,140 +958,6 @@ async function sendFeedbackBatch(items) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Observations produit (opt-in) — content scripts et monitoring automatique
-// ─────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────
-// Historique de prix local — stocké dans chrome.storage.local uniquement
-// ─────────────────────────────────────────────────────────────────────────
-async function recordPrice(urlOrMarketplace, asinOrPrice, maybePrice) {
-  const calledWithUrl = String(urlOrMarketplace || "").startsWith("http");
-  const key = calledWithUrl ? productKey(urlOrMarketplace) : productKey(urlOrMarketplace, asinOrPrice);
-  const price = calledWithUrl ? asinOrPrice : maybePrice;
-  if (!key || price == null) return;
-  const { priceHistory } = await chrome.storage.local.get("priceHistory");
-  const history = priceHistory || {};
-  history[key] = { price, ts: Date.now() };
-  await chrome.storage.local.set({ priceHistory: history });
-}
-
-async function getPrice(marketplace, asin) {
-  const key = productKey(marketplace, asin);
-  if (!key) return null;
-  const { priceHistory } = await chrome.storage.local.get("priceHistory");
-  return priceHistory?.[key] ?? null;
-}
-
-function observationIdentity(item) {
-  const asin = String(item?.external_id || item?.asin || "").toUpperCase();
-  const marketplace = normalizeAmazonHostname(item?.marketplace)
-    || marketplaceFromUrl(item?.url || item?.source_url);
-  if (!marketplace || !/^[A-Z0-9]{10}$/.test(asin)) return null;
-  return { asin, marketplace, key: `${marketplace}:${asin}` };
-}
-
-function observationFingerprint(item) {
-  return JSON.stringify([
-    item.name || null,
-    item.price ?? null,
-    item.in_stock ?? null,
-    item.stock_status || null,
-    item.image_url || null,
-  ]);
-}
-
-async function scheduleObservationFlush() {
-  await chrome.alarms.create(OBSERVATION_FLUSH_ALARM_NAME, {
-    delayInMinutes: 1,
-    periodInMinutes: OBSERVATION_FLUSH_PERIOD_MIN,
-  });
-}
-
-async function flushObservationQueue() {
-  const stored = await chrome.storage.local.get([
-    OBSERVATION_QUEUE_STORAGE_KEY,
-    OBSERVATION_SENT_STORAGE_KEY,
-  ]);
-  const queue = stored[OBSERVATION_QUEUE_STORAGE_KEY] || {};
-  const entries = Object.entries(queue).slice(0, OBSERVATION_BATCH_SIZE);
-  if (!entries.length) return { sent: 0 };
-
-  const dayBucket = new Date().toISOString().slice(0, 10);
-  const body = JSON.stringify({ items: entries.map(([, value]) => value.item), dayBucket });
-  const response = await authenticatedFetch(`${API_BASE}/api/extension/observations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  }, {
-    payload: body,
-    scope: "observations",
-  });
-  if (!response.ok) throw new Error(`observations HTTP ${response.status}`);
-
-  const latest = await chrome.storage.local.get(OBSERVATION_QUEUE_STORAGE_KEY);
-  const nextQueue = latest[OBSERVATION_QUEUE_STORAGE_KEY] || {};
-  const now = Date.now();
-  const sentBuckets = Object.fromEntries(
-    Object.entries(stored[OBSERVATION_SENT_STORAGE_KEY] || {})
-      .filter(([, timestamp]) => now - Number(timestamp) < 2 * TELEMETRY_DEDUPE_MS)
-      .slice(-1000),
-  );
-  for (const [key, value] of entries) {
-    if (nextQueue[key]?.fingerprint === value.fingerprint) delete nextQueue[key];
-    sentBuckets[value.dedupeKey] = now;
-  }
-  await chrome.storage.local.set({
-    [OBSERVATION_QUEUE_STORAGE_KEY]: nextQueue,
-    [OBSERVATION_SENT_STORAGE_KEY]: sentBuckets,
-  });
-  return { sent: entries.length, remaining: Object.keys(nextQueue).length };
-}
-
-async function forwardScrape(items) {
-  const { communityDataEnabled } = await getSettings();
-
-  // Enregistrer les prix localement, indépendamment du partage anonyme
-  for (const it of items || []) {
-    const asin = ((it.external_id || it.asin || "")).toUpperCase();
-    const marketplace = normalizeAmazonHostname(it.marketplace) || marketplaceFromUrl(it.url || it.source_url);
-    if (marketplace && asin && it.price != null) await recordPrice(marketplace, asin, it.price);
-  }
-
-  if (!communityDataEnabled || !items?.length) return { skipped: true };
-
-  const now = Date.now();
-  const bucket = Math.floor(now / TELEMETRY_DEDUPE_MS);
-  const stored = await chrome.storage.local.get([
-    OBSERVATION_QUEUE_STORAGE_KEY,
-    OBSERVATION_SENT_STORAGE_KEY,
-  ]);
-  const queue = stored[OBSERVATION_QUEUE_STORAGE_KEY] || {};
-  const sentBuckets = stored[OBSERVATION_SENT_STORAGE_KEY] || {};
-  let queued = 0;
-  let deduped = 0;
-  for (const item of items) {
-    const identity = observationIdentity(item);
-    if (!identity) continue;
-    const normalizedItem = { ...item, marketplace: identity.marketplace, external_id: identity.asin };
-    const fingerprint = observationFingerprint(normalizedItem);
-    const dedupeKey = `${bucket}:${identity.key}:${fingerprint}`;
-    if (sentBuckets[dedupeKey] || queue[identity.key]?.dedupeKey === dedupeKey) {
-      deduped++;
-      continue;
-    }
-    queue[identity.key] = { item: normalizedItem, fingerprint, dedupeKey, queuedAt: now };
-    queued++;
-  }
-  await chrome.storage.local.set({ [OBSERVATION_QUEUE_STORAGE_KEY]: queue });
-  await scheduleObservationFlush();
-
-  if (Object.keys(queue).length >= OBSERVATION_BATCH_SIZE) {
-    try { return { queued, deduped, ...(await flushObservationQueue()) }; }
-    catch (e) { console.warn("[amzinvite] scrape flush failed:", e); }
-  }
-  return { queued, deduped };
-}
-
-// ─────────────────────────────────────────────────────────────────────────
 // Auto-request d'invitation — POST direct à Amazon (opt-in)
 // Voir docs/ARCHITECTURE.md pour le reverse-engineering complet
 // ─────────────────────────────────────────────────────────────────────────
@@ -1434,14 +1285,14 @@ async function setupOriginRewrite() {
 
 async function migrateMarketplaceStorage() {
   await chrome.storage.local.remove("intervalMin");
-  const { marketplaceStorageVersion, knownStates, knownImages, knownExpiry, stateCheckedAt, priceHistory } =
+  const { marketplaceStorageVersion, knownStates, knownImages, knownExpiry, stateCheckedAt } =
     await chrome.storage.local.get([
-      "marketplaceStorageVersion", "knownStates", "knownImages", "knownExpiry", "stateCheckedAt", "priceHistory",
+      "marketplaceStorageVersion", "knownStates", "knownImages", "knownExpiry", "stateCheckedAt",
     ]);
   const patch = {};
   if (marketplaceStorageVersion < 2) {
     patch.marketplaceStorageVersion = 2;
-    for (const [name, values] of Object.entries({ knownStates, knownImages, knownExpiry, stateCheckedAt, priceHistory })) {
+    for (const [name, values] of Object.entries({ knownStates, knownImages, knownExpiry, stateCheckedAt })) {
       const migrated = {};
       for (const [key, value] of Object.entries(values || {})) {
         migrated[key.includes(":") ? key : `amazon.fr:${key.toUpperCase()}`] = value;
@@ -1485,7 +1336,6 @@ async function checkMarketplaceAuth(marketplace) {
 chrome.runtime.onInstalled.addListener(async (details) => {
   await migrateMarketplaceStorage();
   void scheduleAlarm();
-  void scheduleObservationFlush();
   void setupOriginRewrite();
 
   const existing = await chrome.storage.local.get([
@@ -1511,6 +1361,9 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (existing.telemetryEnabled != null || existing.scrapeEnabled != null) {
     await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   }
+  await chrome.storage.local.remove([
+    "authV2ObservationCredential", "observationQueue", "observationSentBuckets", "priceHistory",
+  ]);
   await updateActionBadge();
   await reconcileSmartScheduler({ refresh: false, force: true });
 
@@ -1522,12 +1375,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(() => {
   void migrateMarketplaceStorage();
   void reconcileSmartScheduler({ refresh: true });
-  scheduleObservationFlush();
   setupOriginRewrite();
   updateActionBadge();
 });
 setupOriginRewrite();
-void scheduleObservationFlush();
 void migrateMarketplaceStorage().then(() => updateActionBadge());
 void scheduleAlarm();
 
@@ -1542,9 +1393,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void refreshBootstrap()
       .catch(() => refreshWaveStatus())
       .finally(() => scheduleWaveStatsAlarm());
-  }
-  if (alarm.name === OBSERVATION_FLUSH_ALARM_NAME) {
-    void flushObservationQueue().catch((e) => console.warn("[amzinvite] observation flush failed:", e));
   }
 });
 
@@ -1673,18 +1521,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e.message || e) }));
     return true;
   }
-  if (msg?.type === "scrape-items") {
-    forwardScrape(msg.items)
-      .then((res) => sendResponse({ ok: true, ...res }))
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
-    return true;
-  }
-  if (msg?.type === "flush-observations") {
-    flushObservationQueue()
-      .then((res) => sendResponse({ ok: true, ...res }))
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
-    return true;
-  }
   if (msg?.type === "report-state") {
     // Provenance content.js (page produit visitée par l'user)
     const asin = asinFromUrl(msg.url);
@@ -1720,10 +1556,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         items,
       }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
-    return true;
-  }
-  if (msg?.type === "get-price") {
-    getPrice(msg.marketplace, msg.asin).then((entry) => sendResponse({ ok: true, entry })).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "export-data") {

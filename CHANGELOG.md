@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.35] — contrôle des notifications
+
+### Features
+- Ajoute un réglage pour désactiver les notifications natives tout en conservant l’historique interne des alertes.
+- Ajoute des accès directs aux comptes X et TikTok `@amzinvite` depuis les réglages.
+
 ## [0.1.34] — arrêt du scraping Amazon passif
 
 ### Privacy

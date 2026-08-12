@@ -11,12 +11,14 @@ Extension Chrome qui suit les produits Pokémon TCG proposés sur invitation Ama
 - suivi automatique des invitations Pokémon TCG sur Amazon France ;
 - ajout manuel de produits Amazon France et Belgique ;
 - surveillance automatique optimisée, avec reprise au redémarrage de Chrome ;
-- notifications lorsqu’une invitation s’ouvre, lorsqu’une demande est envoyée ou lorsque tu es sélectionné ;
-- notification des dernières statistiques disponibles ;
+- notifications natives désactivables lorsqu’une invitation s’ouvre, lorsqu’une demande est envoyée ou lorsque tu es sélectionné ;
+- notification désactivable des dernières statistiques disponibles ;
 - auto-demande optionnelle, désactivée par défaut ;
 - recherche par nom, ASIN ou marketplace ;
 - historique local des 30 dernières alertes ;
+- conservation de l’historique interne même lorsque les notifications natives sont désactivées ;
 - comparaison volontaire des produits sur PrixTCG ;
+- accès direct aux comptes [X](https://x.com/amzinvite) et [TikTok](https://www.tiktok.com/@amzinvite) `@amzinvite` depuis les réglages ;
 - export et import des liens manuels et réglages.
 
 Les réglages restent accessibles dans un écran dédié à l’intérieur du popup.

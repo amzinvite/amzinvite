@@ -349,6 +349,7 @@ async function persistSettings({ reschedule = false } = {}) {
     communityDataEnabled: $("communityDataEnabled").checked,
     trackPokemonTcgFr: $("trackPokemonTcgFr").checked,
     soundEnabled: $("soundEnabled").checked,
+    notificationsEnabled: $("notificationsEnabled").checked,
   });
   await chrome.storage.local.remove(["telemetryEnabled", "scrapeEnabled"]);
   if (reschedule) {
@@ -365,6 +366,7 @@ async function load() {
     "communityDataEnabled",
     "trackPokemonTcgFr",
     "soundEnabled",
+    "notificationsEnabled",
     "compactMode",
     "telemetryEnabled",
     "scrapeEnabled",
@@ -383,6 +385,7 @@ async function load() {
   );
   setChecked("trackPokemonTcgFr", cfg.trackPokemonTcgFr == null ? true : cfg.trackPokemonTcgFr);
   setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
+  setChecked("notificationsEnabled", cfg.notificationsEnabled == null ? true : cfg.notificationsEnabled);
   setViewMode(!!cfg.compactMode);
   startWaveCountdown();
   renderAutoRequestNote();
@@ -973,6 +976,10 @@ $("addUrl").addEventListener("keydown", (e) => {
 });
 
 $("soundEnabled").addEventListener("change", async () => {
+  await persistSettings();
+});
+
+$("notificationsEnabled").addEventListener("change", async () => {
   await persistSettings();
 });
 

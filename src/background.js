@@ -116,6 +116,7 @@ async function getSettings() {
     "telemetryEnabled",
     "scrapeEnabled",
     "soundEnabled",
+    "notificationsEnabled",
   ]);
   const communityDataEnabled = cfg.communityDataEnabled == null
     ? (cfg.scrapeEnabled !== false || !!cfg.telemetryEnabled)
@@ -125,6 +126,7 @@ async function getSettings() {
     communityDataEnabled,
     trackPokemonTcgFr: cfg.trackPokemonTcgFr == null ? true : !!cfg.trackPokemonTcgFr,
     soundEnabled: cfg.soundEnabled == null ? true : !!cfg.soundEnabled,
+    notificationsEnabled: cfg.notificationsEnabled == null ? true : !!cfg.notificationsEnabled,
   };
 }
 
@@ -464,13 +466,16 @@ async function notifyNewPublicFeedItems(previousFeed, nextFeed, { canNotify = tr
   if (remaining > 0) {
     const title = "Nouveaux liens Amazon dans le feed";
     const message = `${freshItems.length} nouveaux produits détectés, dont ${remaining} autre(s) non affiché(s).`;
-    await chrome.notifications.create(`feed-new-summary-${Date.now()}`, {
-      type: "basic",
-      iconUrl: "icons/icon128.png",
-      title,
-      message,
-      priority: 0,
-    });
+    const { notificationsEnabled } = await getSettings();
+    if (notificationsEnabled) {
+      await chrome.notifications.create(`feed-new-summary-${Date.now()}`, {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title,
+        message,
+        priority: 0,
+      });
+    }
     await recordLocalAlert({ kind: "feed_new", title, message });
   }
 }
@@ -768,17 +773,20 @@ async function openNotificationProduct(notificationId) {
 
 async function createProductNotification(kind, { url, title, message, priority = 1 }) {
   if (!url) return;
-  const notificationId = productNotificationId(kind, url);
-  await rememberNotificationUrl(notificationId, url);
-  await chrome.notifications.create(notificationId, {
-    type: "basic",
-    iconUrl: "icons/icon128.png",
-    title,
-    message,
-    priority,
-    // Les invitations acceptées restent affichées jusqu'à action de l'user.
-    requireInteraction: kind === "accepted",
-  });
+  const { notificationsEnabled } = await getSettings();
+  if (notificationsEnabled) {
+    const notificationId = productNotificationId(kind, url);
+    await rememberNotificationUrl(notificationId, url);
+    await chrome.notifications.create(notificationId, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title,
+      message,
+      priority,
+      // Les invitations acceptées restent affichées jusqu'à action de l'user.
+      requireInteraction: kind === "accepted",
+    });
+  }
   await recordLocalAlert({ kind, title, message, url });
 }
 
@@ -787,16 +795,19 @@ export async function notifyFinalizedWave(wave) {
   const { lastNotifiedFinalizedWaveId } = await chrome.storage.local.get("lastNotifiedFinalizedWaveId");
   if (String(lastNotifiedFinalizedWaveId || "") === String(wave.id)) return { deduped: true };
   const notificationId = `wave-finalized-${wave.id}`;
-  await rememberNotificationUrl(notificationId, WAVE_STATS_URL);
   const selected = Number(wave.selected_users || 0);
   const products = Number(wave.products || 0);
-  await chrome.notifications.create(notificationId, {
-    type: "basic",
-    iconUrl: "icons/icon128.png",
-    title: "🌊 Stats de la vague publiées",
-    message: `${selected} sélectionné(s) sur ${products} produit(s) · Voir les résultats`,
-    priority: 1,
-  });
+  const { notificationsEnabled } = await getSettings();
+  if (notificationsEnabled) {
+    await rememberNotificationUrl(notificationId, WAVE_STATS_URL);
+    await chrome.notifications.create(notificationId, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: "🌊 Stats de la vague publiées",
+      message: `${selected} sélectionné(s) sur ${products} produit(s) · Voir les résultats`,
+      priority: 1,
+    });
+  }
   await recordLocalAlert({
     kind: "wave_finalized",
     title: "🌊 Stats de la vague publiées",
@@ -804,7 +815,7 @@ export async function notifyFinalizedWave(wave) {
     url: WAVE_STATS_URL,
   });
   await chrome.storage.local.set({ lastNotifiedFinalizedWaveId: String(wave.id) });
-  return { sent: true };
+  return { sent: true, native: notificationsEnabled };
 }
 
 async function scheduleWaveStatsAlarm(scheduleValue = null) {
@@ -1345,6 +1356,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     "telemetryEnabled",
     "scrapeEnabled",
     "showAll",
+    "notificationsEnabled",
   ]);
   const defaults = {};
   if (existing.autoRequest == null) defaults.autoRequest = false;
@@ -1353,6 +1365,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
   if (existing.trackPokemonTcgFr == null) defaults.trackPokemonTcgFr = true;
   if (existing.showAll == null) defaults.showAll = false;
+  if (existing.notificationsEnabled == null) defaults.notificationsEnabled = true;
   if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   // Premier install avec suivi Pokémon activé : pré-remplit le feed public.
   if (defaults.trackPokemonTcgFr === true) {
@@ -1643,6 +1656,7 @@ async function exportData() {
       communityDataEnabled: settings.communityDataEnabled,
       trackPokemonTcgFr: settings.trackPokemonTcgFr,
       soundEnabled: settings.soundEnabled,
+      notificationsEnabled: settings.notificationsEnabled,
     },
   };
 }
@@ -1673,6 +1687,7 @@ async function importData(data) {
     if (typeof s.communityDataEnabled === "boolean") patch.communityDataEnabled = s.communityDataEnabled;
     if (typeof s.trackPokemonTcgFr === "boolean") patch.trackPokemonTcgFr = s.trackPokemonTcgFr;
     if (typeof s.soundEnabled === "boolean") patch.soundEnabled = s.soundEnabled;
+    if (typeof s.notificationsEnabled === "boolean") patch.notificationsEnabled = s.notificationsEnabled;
   }
   await chrome.storage.local.set(patch);
   await scheduleAlarm();

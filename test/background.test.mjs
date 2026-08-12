@@ -180,6 +180,25 @@ await test("ne notifie qu'une fois la même vague finalisée", async () => {
   }
 });
 
+await test("conserve l'alerte interne quand les notifications natives sont désactivées", async () => {
+  let notifications = 0;
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async () => { notifications++; };
+  store.notificationsEnabled = false;
+  try {
+    const result = await backgroundModule.notifyFinalizedWave({
+      id: "wave-silent", finalized: true, selected_users: 8, products: 3,
+    });
+    assert.equal(result.native, false);
+    assert.equal(notifications, 0);
+    assert.equal(store.localAlerts.length, 1);
+    assert.equal(store.localAlerts[0].kind, "wave_finalized");
+    assert.equal(store.lastNotifiedFinalizedWaveId, "wave-silent");
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
 await test("expose, marque comme lues et efface les alertes locales", async () => {
   store.localAlerts = [{ id: "alert-1", title: "Test", createdAt: Date.now(), read: false }];
   const initial = await dispatch({ type: "get-local-alerts" });
@@ -193,11 +212,12 @@ await test("expose, marque comme lues et efface les alertes locales", async () =
 // ─── Tests ───────────────────────────────────────────────────────────────
 console.log("export/import + défauts :");
 
-await test("export-data renvoie les bons défauts (son ON, Pokémon FR ON)", async () => {
+await test("export-data renvoie les bons défauts (notifications, son et Pokémon FR ON)", async () => {
   const res = await dispatch({ type: "export-data" });
   assert.equal(res.ok, true);
   assert.equal(res.data.app, "amzinvite");
   assert.equal(res.data.settings.soundEnabled, true);
+  assert.equal(res.data.settings.notificationsEnabled, true);
   assert.equal(res.data.settings.trackPokemonTcgFr, true);
   assert.equal(res.data.settings.autoRequest, false);
   assert.deepEqual(res.data.customUrls, []);
@@ -219,7 +239,7 @@ await test("import-data refuse un fichier invalide", async () => {
 await test("import-data ajoute les produits et applique les réglages", async () => {
   const bundle = {
     app: "amzinvite", version: 1, customUrls: [{ url: URL_A, name: "A" }, { url: URL_B, name: "B" }],
-    settings: { intervalMin: 45, autoRequest: true, soundEnabled: false, trackPokemonTcgFr: false },
+    settings: { intervalMin: 45, autoRequest: true, soundEnabled: false, notificationsEnabled: false, trackPokemonTcgFr: false },
   };
   const res = await dispatch({ type: "import-data", data: bundle });
   assert.equal(res.ok, true);
@@ -228,6 +248,7 @@ await test("import-data ajoute les produits et applique les réglages", async ()
   assert.equal(store.intervalMin, undefined, "l'ancien intervalle importé doit être ignoré");
   assert.equal(store.autoRequest, true);
   assert.equal(store.soundEnabled, false);
+  assert.equal(store.notificationsEnabled, false);
   assert.equal(store.trackPokemonTcgFr, false);
 });
 

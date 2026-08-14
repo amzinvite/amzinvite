@@ -462,6 +462,28 @@ await test("annule un check en cours et nettoie sa progression", async () => {
   assert.equal(cancellation.cancelled, true);
   assert.equal(result.cancelled, true);
   assert.equal(store.checkProgress, undefined);
+  assert.deepEqual(store.checkResume.urls, [URL_A]);
+});
+
+await test("reprend les produits restants et bloque les relances trop rapides", async () => {
+  store.customUrls = [{ url: URL_A, name: "Déjà fait" }, { url: URL_B, name: "À reprendre" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  store.checkResume = { urls: [URL_B], createdAt: Date.now() };
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    return { ok: true, status: 200, url, text: async () => amazonFixture("not-invitation.html") };
+  };
+
+  const resumed = await dispatch({ type: "check-now" });
+  const blocked = await dispatch({ type: "check-now" });
+
+  assert.equal(resumed.resumed, true);
+  assert.deepEqual(calls, [URL_B]);
+  assert.equal(store.checkResume, undefined);
+  assert.equal(blocked.error, "cooldown");
+  assert.ok(blocked.retryAfterMs > 0 && blocked.retryAfterMs <= 15_000);
 });
 
 console.log("\nauto-demande :");
@@ -507,6 +529,7 @@ await test("un refus Amazon reste visible et ne bloque pas une nouvelle tentativ
   };
 
   const first = await dispatch({ type: "check-now" });
+  store.manualCheckStartedAt = Date.now() - 16_000;
   const second = await dispatch({ type: "check-now" });
   assert.equal(first.items[0].autoError, "amazon HTTP 403");
   assert.equal(second.items[0].autoError, "amazon HTTP 403");

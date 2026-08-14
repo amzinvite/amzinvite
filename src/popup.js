@@ -20,6 +20,7 @@ let singleScanCdTimer = null;
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 60 * 60 * 1000;
 let checkIsRunning = false;
+let checkHasResume = false;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
 const NEW_FEED_ITEM_MS = 15 * 24 * 60 * 60 * 1000;
 const AMAZON_BE_ORIGINS = [
@@ -106,7 +107,7 @@ function setCheckRunning(running) {
   const button = $("check");
   if (!button) return;
   button.disabled = false;
-  button.textContent = checkIsRunning ? "Arrêter" : "Vérifier maintenant";
+  button.textContent = checkIsRunning ? "Arrêter" : (checkHasResume ? "Reprendre" : "Vérifier maintenant");
 }
 
 function truncate(s, n) {
@@ -383,6 +384,7 @@ async function load() {
     "lastRun",
     "showAll",
     "checkProgress",
+    "checkResume",
     "manualCheckHasRun",
     "autoRequestPromptHandled",
   ]);
@@ -407,6 +409,8 @@ async function load() {
 
   await refreshList(cfg.lastRun, cfg.showAll);
   await refreshNextCheck();
+  checkHasResume = Array.isArray(cfg.checkResume?.urls) && cfg.checkResume.urls.length > 0;
+  setCheckRunning(false);
 
   if (cfg.checkProgress) {
     if (isProgressStale(cfg.checkProgress)) {
@@ -478,6 +482,12 @@ function startProgressListener() {
         setCheckRunning(false);
         if (hadScanUrl) rerenderCurrentList();
       }
+    }
+
+    if (changes.checkResume) {
+      const resume = changes.checkResume.newValue;
+      checkHasResume = Array.isArray(resume?.urls) && resume.urls.length > 0;
+      if (!checkIsRunning) setCheckRunning(false);
     }
 
     if (changes.lastRun || changes.knownStates || changes.publicFeed || changes.customUrls || changes.showAll) {
@@ -1066,8 +1076,11 @@ $("check").addEventListener("click", async () => {
 
   chrome.storage.onChanged.addListener(storageListener);
   const timeoutHandle = setTimeout(finalize, CHECK_BUTTON_TIMEOUT_MS);
-  chrome.runtime.sendMessage({ type: "check-now" }, () => {
+  chrome.runtime.sendMessage({ type: "check-now" }, (response) => {
     void chrome.runtime.lastError;
+    if (response?.error === "cooldown") {
+      setError(`Patiente ${Math.max(1, Math.ceil(Number(response.retryAfterMs || 0) / 1000))} s avant de relancer.`);
+    }
     finalize();
   });
 });

@@ -47,6 +47,7 @@ const REQUEST_DELAY_MAX_MS = 18_000;
 const REQUEST_LONG_PAUSE_MIN_MS = 25_000;
 const REQUEST_LONG_PAUSE_MAX_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 25_000;
+const MANUAL_CHECK_COOLDOWN_MS = 15_000;
 const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
 const ALREADY_REQUESTED_RECHECK_MS = 4 * 60 * 60 * 1000;
 const FEED_REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -1504,8 +1505,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "check-now") {
-    runCheck({ force: true })
-      .then((res) => sendResponse({ ok: true, ...res }))
+    (async () => {
+      const now = Date.now();
+      const stored = await chrome.storage.local.get(["manualCheckStartedAt", "checkResume"]);
+      const retryAfterMs = MANUAL_CHECK_COOLDOWN_MS - (now - Number(stored.manualCheckStartedAt || 0));
+      if (retryAfterMs > 0) return { ok: false, error: "cooldown", retryAfterMs };
+      await chrome.storage.local.set({ manualCheckStartedAt: now });
+      const resumeUrls = Array.isArray(stored.checkResume?.urls) ? stored.checkResume.urls : null;
+      const result = await runCheck({ force: true, onlyUrls: resumeUrls?.length ? resumeUrls : null });
+      return { ok: true, resumed: !!resumeUrls?.length, ...result };
+    })()
+      .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
@@ -1762,12 +1772,14 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
 
   let requestsSinceLongPause = 0;
   let longPauseAfter = secureRandomInt(3, 7);
+  let resumeFromIndex = 0;
 
   for (let i = 0; i < watchlist.length; i++) {
     if (signal?.aborted) {
       summary.cancelled = true;
       break;
     }
+    resumeFromIndex = i;
     const it = watchlist[i];
     await chrome.storage.local.set({
       checkProgress: {
@@ -1784,6 +1796,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         const lastCheckedAt = await getLastStateCheckAt(it.url);
         if (lastCheckedAt && Date.now() - lastCheckedAt < ALREADY_REQUESTED_RECHECK_MS) {
           summary.items.push({ url: it.url, state: it.known_state, skipped: true, reason: "recently_checked" });
+          resumeFromIndex = i + 1;
           continue;
         }
       }
@@ -1809,11 +1822,13 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
               waitMs: delay,
             },
           });
+          resumeFromIndex = i + 1;
           if (!(await sleep(delay, signal))) {
             summary.cancelled = true;
             break;
           }
         }
+        resumeFromIndex = i + 1;
         continue;
       }
 
@@ -1893,6 +1908,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         break;
       }
     }
+    resumeFromIndex = i + 1;
     if (i < watchlist.length - 1) {
       const useLongPause = ++requestsSinceLongPause >= longPauseAfter;
       const delay = randomInterProductDelay(useLongPause);
@@ -1918,6 +1934,15 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
     }
   }
 
+  if (signal?.aborted) summary.cancelled = true;
+  const remainingUrls = summary.cancelled
+    ? watchlist.slice(resumeFromIndex).map((item) => item.url)
+    : [];
+  if (remainingUrls.length) {
+    await chrome.storage.local.set({ checkResume: { urls: remainingUrls, createdAt: Date.now() } });
+  } else {
+    await chrome.storage.local.remove("checkResume");
+  }
   await sendFeedbackBatch(feedbackItems);
   await chrome.storage.local.set({ lastRun: { ts: Date.now(), ...summary } });
   await chrome.storage.local.remove("checkProgress");

@@ -53,6 +53,8 @@ const ALREADY_REQUESTED_RECHECK_MS = 4 * 60 * 60 * 1000;
 const FEED_REFRESH_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_SMART_SYNC_MIN = 6 * 60;
 const DEFAULT_WAVE_JITTER_MIN = 4;
+const WAVE_HEARTBEAT_MIN_MINUTES = 30;
+const WAVE_HEARTBEAT_MAX_MINUTES = 36;
 const WAVE_SCAN_OFFSETS_MIN = Object.freeze([5, 20, 35, 50, 65, 80, 95, 110, 125, 150, 180, 360, 720, 1380]);
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -1161,6 +1163,26 @@ export async function scheduleAlarm({ force = false } = {}) {
         completedJobs[id] = now;
       }
     }
+    // Pendant une vague, aucune installation active ne doit rester silencieuse
+    // plus de 30 à 36 minutes, même si un calendrier distant est incomplet ou
+    // si Chrome a manqué une alarme planifiée.
+    if (now >= startsAt && now < endsAt) {
+      const heartbeatId = `wave-heartbeat:${wave.id}`;
+      if (jobJitter[heartbeatId] == null) {
+        jobJitter[heartbeatId] = secureRandomInt(
+          WAVE_HEARTBEAT_MIN_MINUTES,
+          WAVE_HEARTBEAT_MAX_MINUTES,
+        );
+      }
+      const lastRunAt = Math.max(Number(stored.lastRun?.ts || 0), startsAt);
+      const heartbeatDueAt = lastRunAt + Number(jobJitter[heartbeatId]) * 60000;
+      candidates.push({
+        id: heartbeatId,
+        reason: "wave_heartbeat",
+        waveId: wave.id,
+        when: heartbeatDueAt > now ? heartbeatDueAt : now + secureRandomInt(30, 120) * 1000,
+      });
+    }
     // Un utilisateur qui rallume Chrome après la clôture reçoit encore un
     // contrôle de rattrapage unique pendant la fenêtre d'achat potentielle.
     const lateId = `wave-late:${wave.id}`;
@@ -1229,7 +1251,7 @@ async function schedulerTick() {
     catch (_) { try { await refreshPublicFeed(); } catch (_) {} }
   }
 
-  if (["wave_check", "wave_catchup", "wave_late_catchup"].includes(plan.reason)) {
+  if (["wave_check", "wave_catchup", "wave_late_catchup", "wave_heartbeat"].includes(plan.reason)) {
     await runCheck({ scheduled: true });
   } else if (plan.reason === "new_feed_check") {
     const result = await runCheck({ scheduled: true, onlyUrls: pendingNewFeedUrls || [] });
@@ -1392,7 +1414,9 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     "authV2ObservationCredential", "observationQueue", "observationSentBuckets", "priceHistory",
   ]);
   await updateActionBadge();
-  await reconcileSmartScheduler({ refresh: false, force: true });
+  // Une release peut arriver au milieu d'une vague : récupérer immédiatement
+  // le calendrier courant pour programmer le rattrapage sans attendre 6 h.
+  await reconcileSmartScheduler({ refresh: true, force: true });
 
   // Ouvre la page d'onboarding au premier install
   if (details.reason === "install") {

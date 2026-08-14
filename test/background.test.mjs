@@ -143,6 +143,31 @@ await test("planifie un rattrapage pendant une vague en cours", async () => {
   assert.ok(store.schedulerPlan.when > now);
 });
 
+await test("garantit un contrôle au plus tard 36 minutes après le précédent pendant une vague", async () => {
+  const now = Date.now();
+  store.trackPokemonTcgFr = true;
+  store.bootstrapFetchedAt = now;
+  store.lastRun = { ts: now - 10 * 60000 };
+  store.schedulerState = {
+    completedJobs: {
+      "wave-check:wave-now:5": now,
+      "wave-check:wave-now:35": now,
+    },
+    jobJitter: { "wave-heartbeat:wave-now": 36 },
+  };
+  store.smartSchedule = {
+    version: "test",
+    waves: [{ id: "wave-now", starts_at: (now - 60 * 60000) / 1000, ends_at: (now + 23 * 3600000) / 1000 }],
+    scan_offsets_minutes: [5, 35],
+    jitter_minutes: 0,
+    sync_interval_minutes: 360,
+    custom_interval_minutes: 360,
+  };
+  await backgroundModule.scheduleAlarm({ force: true });
+  assert.equal(store.schedulerPlan.reason, "wave_heartbeat");
+  assert.equal(store.schedulerPlan.when, store.lastRun.ts + 36 * 60000);
+});
+
 await test("planifie seulement le nouveau produit quelques minutes après sa découverte", async () => {
   const now = Date.now();
   store.trackPokemonTcgFr = true;

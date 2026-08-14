@@ -880,15 +880,17 @@ async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeS
   try {
     const instanceId = await getInstanceId();
     const body = JSON.stringify({ marketplace, asin, state, source, observedAt: Math.floor(now / 1000) });
+    const timeout = withTimeout();
     const response = await authenticatedFetch(`${API_BASE}/api/extension/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
+      signal: timeout.signal,
     }, {
       payload: body,
       scope: "instance",
       instanceId,
-    });
+    }).finally(timeout.done);
     if (!response.ok) throw new Error(`feedback HTTP ${response.status}`);
     const freshBuckets = Object.fromEntries(
       Object.entries(sentBuckets)
@@ -938,15 +940,17 @@ async function sendFeedbackBatch(items) {
       const body = JSON.stringify({
         items: chunk.map(({ dedupeKey: _dedupeKey, url: _url, ...item }) => item),
       });
+      const timeout = withTimeout();
       const response = await authenticatedFetch(`${API_BASE}${FEEDBACK_BATCH_PATH}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
+        signal: timeout.signal,
       }, {
         payload: body,
         scope: "instance",
         instanceId,
-      });
+      }).finally(timeout.done);
       if (!response.ok) throw new Error(`feedback batch HTTP ${response.status}`);
       sentCount += chunk.length;
     }
@@ -1036,16 +1040,25 @@ async function markAutoSpawned(url) {
 // ─────────────────────────────────────────────────────────────────────────
 // Fetch + détection
 // ─────────────────────────────────────────────────────────────────────────
-function withTimeout(ms = REQUEST_TIMEOUT_MS) {
+function withTimeout(ms = REQUEST_TIMEOUT_MS, externalSignal = null) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
-  return { signal: controller.signal, done: () => clearTimeout(timeout) };
+  const abortFromExternal = () => controller.abort();
+  externalSignal?.addEventListener("abort", abortFromExternal, { once: true });
+  if (externalSignal?.aborted) controller.abort();
+  return {
+    signal: controller.signal,
+    done: () => {
+      clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", abortFromExternal);
+    },
+  };
 }
 
-async function fetchAmazonPage(url) {
+async function fetchAmazonPage(url, externalSignal = null) {
   const marketplace = marketplaceFromUrl(url);
   if (!marketplace) throw new Error("Marketplace Amazon non supportée");
-  const timeout = withTimeout();
+  const timeout = withTimeout(REQUEST_TIMEOUT_MS, externalSignal);
   const r = await fetch(url, {
     credentials: "include",
     redirect: "follow",
@@ -1496,6 +1509,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg?.type === "cancel-check") {
+    const cancelled = !!activeRunController;
+    activeRunController?.abort();
+    sendResponse({ ok: true, cancelled });
+    return false;
+  }
   if (msg?.type === "get-schedule") {
     Promise.all([
       chrome.alarms.get(ALARM_NAME),
@@ -1699,17 +1718,21 @@ async function importData(data) {
 // runCheck — boucle principale de vérification des invitations
 // ─────────────────────────────────────────────────────────────────────────
 let activeRun = null;
+let activeRunController = null;
 async function runCheck({ force = false, scheduled = false, customOnly = false, onlyUrls = null } = {}) {
   if (activeRun) return activeRun;
   startKeepalive();
-  activeRun = runCheckOnce({ force, scheduled, customOnly, onlyUrls }).finally(() => {
+  activeRunController = new AbortController();
+  activeRun = runCheckOnce({ force, scheduled, customOnly, onlyUrls, signal: activeRunController.signal }).finally(async () => {
+    await chrome.storage.local.remove("checkProgress");
     activeRun = null;
+    activeRunController = null;
     stopKeepalive();
   });
   return activeRun;
 }
 
-async function runCheckOnce({ force = false, scheduled = false, customOnly = false, onlyUrls = null } = {}) {
+async function runCheckOnce({ force = false, scheduled = false, customOnly = false, onlyUrls = null, signal = null } = {}) {
   const summary = { checked: 0, errors: 0, items: [] };
   const feedbackItems = [];
   await chrome.storage.local.set({
@@ -1741,6 +1764,10 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
   let longPauseAfter = secureRandomInt(3, 7);
 
   for (let i = 0; i < watchlist.length; i++) {
+    if (signal?.aborted) {
+      summary.cancelled = true;
+      break;
+    }
     const it = watchlist[i];
     await chrome.storage.local.set({
       checkProgress: {
@@ -1761,7 +1788,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         }
       }
 
-      const html = await fetchAmazonPage(it.url);
+      const html = await fetchAmazonPage(it.url, signal);
       if (isAmazonBlockPage(html)) throw new Error("amazon captcha");
       if (isStub(html)) {
         summary.items.push({ url: it.url, state: "stub_no_data" });
@@ -1782,7 +1809,10 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
               waitMs: delay,
             },
           });
-          await sleep(delay);
+          if (!(await sleep(delay, signal))) {
+            summary.cancelled = true;
+            break;
+          }
         }
         continue;
       }
@@ -1854,6 +1884,10 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
     } catch (e) {
       summary.errors++;
       summary.items.push({ url: it.url, error: String(e) });
+      if (signal?.aborted) {
+        summary.cancelled = true;
+        break;
+      }
       if (/amazon HTTP (403|429)|captcha/i.test(String(e))) {
         summary.blocked = true;
         break;
@@ -1877,7 +1911,10 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
           waitMs: delay,
         },
       });
-      await sleep(delay);
+      if (!(await sleep(delay, signal))) {
+        summary.cancelled = true;
+        break;
+      }
     }
   }
 
@@ -1888,7 +1925,20 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
   return summary;
 }
 
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+function sleep(ms, signal = null) {
+  if (signal?.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      resolve(false);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 function randomInterProductDelay(longPause = false) {
   return longPause
     ? secureRandomInt(REQUEST_LONG_PAUSE_MIN_MS, REQUEST_LONG_PAUSE_MAX_MS)

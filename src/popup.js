@@ -18,7 +18,8 @@ let singleScanUrl = null;
 let singleScanStartedAt = null;
 let singleScanCdTimer = null;
 const STALE_PROGRESS_MS = 45_000;
-const CHECK_BUTTON_TIMEOUT_MS = 5 * 60 * 1000;
+const CHECK_BUTTON_TIMEOUT_MS = 60 * 60 * 1000;
+let checkIsRunning = false;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
 const NEW_FEED_ITEM_MS = 15 * 24 * 60 * 60 * 1000;
 const AMAZON_BE_ORIGINS = [
@@ -96,7 +97,16 @@ function setError(message = "") {
 }
 
 function isProgressStale(progress) {
-  return !progress?.startedAt || Date.now() - progress.startedAt > STALE_PROGRESS_MS;
+  const allowedIdleMs = Math.max(STALE_PROGRESS_MS, Number(progress?.waitMs || 0) + 30_000);
+  return !progress?.startedAt || Date.now() - progress.startedAt > allowedIdleMs;
+}
+
+function setCheckRunning(running) {
+  checkIsRunning = !!running;
+  const button = $("check");
+  if (!button) return;
+  button.disabled = false;
+  button.textContent = checkIsRunning ? "Arrêter" : "Vérifier maintenant";
 }
 
 function truncate(s, n) {
@@ -410,7 +420,7 @@ async function load() {
         ? { current: cfg.checkProgress.current, total: cfg.checkProgress.total, startedAt: cfg.checkProgress.startedAt, waitMs: cfg.checkProgress.waitMs || null, phase: cfg.checkProgress.phase }
         : null;
       renderCheckProgress(cfg.checkProgress);
-      $("check").disabled = true;
+      setCheckRunning(true);
     }
   }
 
@@ -429,7 +439,7 @@ function startProgressListener() {
       const next = changes.checkProgress.newValue;
       if (next) {
         renderCheckProgress(next);
-        $("check").disabled = true;
+        setCheckRunning(true);
         const newScanUrl = next.currentUrl || null;
         const newProgress = (next.phase === "checking" || next.phase === "waiting")
           ? { current: next.current, total: next.total, startedAt: next.startedAt, waitMs: next.waitMs || null, phase: next.phase }
@@ -465,7 +475,7 @@ function startProgressListener() {
         scanEtaBaseMs = null;
         scanEtaBaseAt = null;
         stopScanCd();
-        $("check").disabled = false;
+        setCheckRunning(false);
         if (hadScanUrl) rerenderCurrentList();
       }
     }
@@ -1026,9 +1036,16 @@ $("reset").addEventListener("click", async () => {
 });
 
 $("check").addEventListener("click", async () => {
+  if (checkIsRunning) {
+    $("check").disabled = true;
+    $("check").textContent = "Arrêt…";
+    await sendMessage({ type: "cancel-check" });
+    $("check").disabled = false;
+    return;
+  }
   setError("");
   $("sub").textContent = "Check en cours…";
-  $("check").disabled = true;
+  setCheckRunning(true);
   await offerAutoRequestAfterFirstCheck();
 
   let settled = false;
@@ -1038,7 +1055,7 @@ $("check").addEventListener("click", async () => {
     chrome.storage.onChanged.removeListener(storageListener);
     clearTimeout(timeoutHandle);
     await refreshList();
-    $("check").disabled = false;
+    setCheckRunning(false);
   };
 
   const cfgBefore = await chrome.storage.local.get("lastRun");

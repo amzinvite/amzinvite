@@ -440,6 +440,30 @@ await test("ne contrôle aucun produit absent de la watchlist", async () => {
   assert.deepEqual(calls, []);
 });
 
+await test("annule un check en cours et nettoie sa progression", async () => {
+  store.customUrls = [{ url: URL_A, name: "Fixture lente" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  let requestStarted;
+  const started = new Promise((resolve) => { requestStarted = resolve; });
+  globalThis.fetch = async (url, options = {}) => {
+    if (url !== URL_A) return defaultFetch(url, options);
+    requestStarted();
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener("abort", () => reject(new DOMException("Annulé", "AbortError")), { once: true });
+    });
+  };
+
+  const running = dispatch({ type: "check-now" });
+  await started;
+  const cancellation = await dispatch({ type: "cancel-check" });
+  const result = await running;
+
+  assert.equal(cancellation.cancelled, true);
+  assert.equal(result.cancelled, true);
+  assert.equal(store.checkProgress, undefined);
+});
+
 console.log("\nauto-demande :");
 
 await test("redemande une invitation expirée actionnable et pose le cooldown après succès", async () => {

@@ -19,6 +19,7 @@ let singleScanStartedAt = null;
 let singleScanCdTimer = null;
 const STALE_PROGRESS_MS = 45_000;
 const CHECK_BUTTON_TIMEOUT_MS = 60 * 60 * 1000;
+const CANCEL_UI_TIMEOUT_MS = 3_000;
 let checkIsRunning = false;
 let checkHasResume = false;
 const HIDDEN_BY_DEFAULT = new Set(["already_requested", "not_invitation"]);
@@ -1073,8 +1074,18 @@ $("check").addEventListener("click", async () => {
   if (checkIsRunning) {
     $("check").disabled = true;
     $("check").textContent = "Arrêt…";
-    await sendMessage({ type: "cancel-check" });
-    $("check").disabled = false;
+    try {
+      await Promise.race([
+        sendMessage({ type: "cancel-check" }),
+        new Promise((resolve) => setTimeout(resolve, CANCEL_UI_TIMEOUT_MS)),
+      ]);
+    } finally {
+      // Le bouton ne doit jamais dépendre de la fin de la télémétrie ou d'un
+      // callback perdu lors du réveil du service worker.
+      await chrome.storage.local.remove("checkProgress");
+      setCheckRunning(false);
+      $("sub").textContent = "Contrôle arrêté.";
+    }
     return;
   }
   setError("");

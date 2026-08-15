@@ -45,7 +45,7 @@ globalThis.chrome = {
     onStartup: { addListener: noop },
     sendMessage: asyncNoop,
     getURL: (p) => `chrome-extension://test/${p}`,
-    getManifest: () => ({ version: "0.1.37" }),
+    getManifest: () => ({ version: "0.1.38" }),
   },
   action: { setBadgeBackgroundColor: asyncNoop, setBadgeText: asyncNoop, setTitle: asyncNoop },
   alarms: { get: async () => null, create: noop, clear: asyncNoop, onAlarm: evt() },
@@ -220,6 +220,52 @@ await test("conserve l'alerte interne quand les notifications natives sont désa
     assert.equal(store.localAlerts.length, 1);
     assert.equal(store.localAlerts[0].kind, "wave_finalized");
     assert.equal(store.lastNotifiedFinalizedWaveId, "wave-silent");
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("mémorise la vague historique au premier bootstrap sans la notifier", async () => {
+  let latestWave = {
+    id: "wave-before-install",
+    finalized: true,
+    selected_users: 141,
+    products: 16,
+  };
+  let notifications = 0;
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async () => { notifications++; };
+  store.trackPokemonTcgFr = true;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes("/api/extension/bootstrap")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          invitations: [],
+          schedule: { version: "test", waves: [] },
+          latest_finalized_wave: latestWave,
+        }),
+      };
+    }
+    return defaultFetch(url, options);
+  };
+  try {
+    await backgroundModule.refreshBootstrap();
+    assert.equal(store.lastNotifiedFinalizedWaveId, "wave-before-install");
+    assert.equal(notifications, 0);
+    assert.deepEqual(store.localAlerts, undefined);
+
+    latestWave = {
+      id: "wave-published-later",
+      finalized: true,
+      selected_users: 12,
+      products: 3,
+    };
+    await backgroundModule.refreshBootstrap();
+    assert.equal(store.lastNotifiedFinalizedWaveId, "wave-published-later");
+    assert.equal(notifications, 1);
+    assert.equal(store.localAlerts.length, 1);
   } finally {
     chrome.notifications.create = originalCreate;
   }
@@ -473,7 +519,9 @@ await test("mémorise et transmet un parcours complet réussi sans requête déd
   let feedbackPayload = null;
   globalThis.fetch = async (url, options = {}) => {
     if (url === URL_A) {
-      return { ok: true, status: 200, url, text: async () => amazonFixture("normal-product.html") };
+      const htmlWithPrice = amazonFixture("normal-product.html")
+        .replace("</body>", '<span id="priceblock_ourprice">29,99 €</span></body>');
+      return { ok: true, status: 200, url, text: async () => htmlWithPrice };
     }
     if (String(url).endsWith("/api/extension/feedback/batch")) {
       feedbackPayload = JSON.parse(options.body);
@@ -489,7 +537,7 @@ await test("mémorise et transmet un parcours complet réussi sans requête déd
   assert.deepEqual(feedbackPayload.scanSummary, {
     runKind: "full",
     outcome: "completed",
-    extensionVersion: "0.1.37",
+    extensionVersion: "0.1.38",
     checked: 1,
     expected: 1,
     errors: 0,
@@ -525,6 +573,22 @@ await test("annule un check en cours et nettoie sa progression", async () => {
   assert.equal(result.cancelled, true);
   assert.equal(store.checkProgress, undefined);
   assert.deepEqual(store.checkResume.urls, [URL_A]);
+});
+
+await test("nettoie une progression orpheline même sans check actif", async () => {
+  store.checkProgress = {
+    startedAt: Date.now(),
+    phase: "checking",
+    current: 4,
+    total: 53,
+    currentUrl: URL_A,
+  };
+
+  const cancellation = await dispatch({ type: "cancel-check" });
+
+  assert.equal(cancellation.ok, true);
+  assert.equal(cancellation.cancelled, false);
+  assert.equal(store.checkProgress, undefined);
 });
 
 await test("reprend les produits restants et bloque les relances trop rapides", async () => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.38] — correction du contrôle Amazon
+
+### Fixes
+- Supprime deux appels orphelins à l'ancien historique local des prix qui faisaient échouer la détection dès qu'une fiche Amazon affichait un prix.
+- Mémorise la dernière vague déjà finalisée au premier lancement sans afficher une alerte historique trompeuse.
+- Rend l'arrêt immédiat dans le popup et nettoie les progressions orphelines même si le service worker a redémarré.
+- Ajoute un test de non-régression sur un parcours complet avec prix affiché.
+
 ## [0.1.37] — suivi des scans complets
 
 ### Features

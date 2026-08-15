@@ -367,9 +367,9 @@ async function refreshPublicFeed() {
   return items;
 }
 
-async function refreshBootstrap() {
-  const { publicFeed: previousFeed, publicFeedFetchedAt } = await chrome.storage.local.get([
-    "publicFeed", "publicFeedFetchedAt",
+export async function refreshBootstrap() {
+  const { publicFeed: previousFeed, publicFeedFetchedAt, bootstrapFetchedAt } = await chrome.storage.local.get([
+    "publicFeed", "publicFeedFetchedAt", "bootstrapFetchedAt",
   ]);
   const settings = await getSettings();
   const marketplaces = selectedMarketplaces(settings);
@@ -406,7 +406,17 @@ async function refreshBootstrap() {
     latestFinalizedWave: payload.latest_finalized_wave || null,
   });
   await notifyNewPublicFeedItems(previousFeed || [], payload.invitations, { canNotify: !!publicFeedFetchedAt });
-  if (payload.latest_finalized_wave) await notifyFinalizedWave(payload.latest_finalized_wave);
+  if (payload.latest_finalized_wave) {
+    if (bootstrapFetchedAt) {
+      await notifyFinalizedWave(payload.latest_finalized_wave);
+    } else {
+      // Au premier lancement, la dernière vague finalisée sert de point de
+      // départ. Elle précède l'installation et ne doit pas sembler nouvelle.
+      await chrome.storage.local.set({
+        lastNotifiedFinalizedWaveId: String(payload.latest_finalized_wave.id),
+      });
+    }
+  }
   await scheduleWaveStatsAlarm(schedule);
   return { ...payload, schedule };
 }
@@ -667,28 +677,6 @@ function extractProductImageFromHtml(html) {
   // landingImage src
   const srcMatch = html.match(/id="landingImage"[^>]+src="([^"]+)"/i);
   if (srcMatch?.[1] && srcMatch[1].startsWith("http")) return srcMatch[1];
-  return null;
-}
-
-function extractProductPriceFromHtml(html) {
-  if (!html) return null;
-  // Méthode principale : .a-offscreen dans les blocs prix buybox connus
-  // Amazon met le prix lisible en texte dans ce span caché ex: "55,99 €"
-  const priceBlockPatterns = [
-    /id="corePrice_desktop"[^]*?class="a-offscreen">([^<]+)</i,
-    /id="corePriceDisplay_desktop_feature_div"[^]*?class="a-offscreen">([^<]+)</i,
-    /id="corePrice_feature_div"[^]*?class="a-offscreen">([^<]+)</i,
-    /id="price_inside_buybox"[^>]*>([^<]+)</i,
-    /id="priceblock_ourprice"[^>]*>([^<]+)</i,
-  ];
-  for (const re of priceBlockPatterns) {
-    const m = html.match(re);
-    if (m?.[1]) {
-      const raw = m[1].replace(/\s/g, "").replace("€", "").replace(",", ".");
-      const val = parseFloat(raw);
-      if (!isNaN(val) && val > 0) return val;
-    }
-  }
   return null;
 }
 
@@ -1517,9 +1505,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const html = await fetchAmazonPage(normalizedUrl);
         if (isStub(html)) return sendResponse({ ok: false, error: "stub" });
         storeKnownImage(normalizedUrl, html).catch(() => {});
-        const _asinSingle = asinFromUrl(normalizedUrl);
-        const _priceSingle = extractProductPriceFromHtml(html);
-        if (_asinSingle && _priceSingle != null) recordPrice(normalizedUrl, _priceSingle).catch(() => {});
         const { text, doc, rawHtml } = extractBuyboxText(html);
         const state = detectInvitationState(text, doc, rawHtml);
         await setKnownState(normalizedUrl, state);
@@ -1552,8 +1537,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "cancel-check") {
     const cancelled = !!activeRunController;
     activeRunController?.abort();
-    sendResponse({ ok: true, cancelled });
-    return false;
+    // Nettoie immédiatement l'UI, sans attendre la télémétrie de fin de cycle.
+    // Cela répare aussi une progression orpheline après un redémarrage du SW.
+    chrome.storage.local.remove("checkProgress")
+      .then(() => sendResponse({ ok: true, cancelled }))
+      .catch((e) => sendResponse({ ok: false, cancelled, error: String(e) }));
+    return true;
   }
   if (msg?.type === "get-schedule") {
     Promise.all([
@@ -1877,9 +1866,6 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
       }
 
       storeKnownImage(it.url, html).catch(() => {});
-      const asinKey = asinFromUrl(it.url);
-      const scrapedPrice = extractProductPriceFromHtml(html);
-      if (asinKey && scrapedPrice != null) recordPrice(it.url, scrapedPrice).catch(() => {});
       const { text, doc, rawHtml } = extractBuyboxText(html);
         const state = detectInvitationState(text, doc, rawHtml);
         const asin = asinFromUrl(it.url);

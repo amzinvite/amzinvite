@@ -382,6 +382,7 @@ async function load() {
     "telemetryEnabled",
     "scrapeEnabled",
     "lastRun",
+    "lastFullRun",
     "showAll",
     "checkProgress",
     "checkResume",
@@ -408,6 +409,7 @@ async function load() {
   setupImagePreview();
 
   await refreshList(cfg.lastRun, cfg.showAll);
+  renderLastFullRun(cfg.lastFullRun);
   await refreshNextCheck();
   checkHasResume = Array.isArray(cfg.checkResume?.urls) && cfg.checkResume.urls.length > 0;
   setCheckRunning(false);
@@ -493,11 +495,33 @@ function startProgressListener() {
     if (changes.lastRun || changes.knownStates || changes.publicFeed || changes.customUrls || changes.showAll) {
       chrome.storage.local.get(["lastRun", "showAll"]).then((cfg) => refreshList(cfg.lastRun, cfg.showAll));
     }
+    if (changes.lastFullRun) renderLastFullRun(changes.lastFullRun.newValue);
     if (changes.localAlerts) void renderLocalAlerts();
   });
 }
 
 function renderCheckProgress() {}
+
+function renderLastFullRun(lastFullRun) {
+  const target = $("last-full-run");
+  if (!target) return;
+  if (!lastFullRun?.ts) {
+    target.textContent = "Dernier scan complet : aucun";
+    target.title = "Aucun parcours complet et sans erreur n'a encore été enregistré sur cet appareil.";
+    return;
+  }
+  const when = new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(lastFullRun.ts));
+  const checked = Number(lastFullRun.checked || 0);
+  const expected = Number(lastFullRun.expected || checked);
+  const durationMinutes = Math.max(1, Math.round(Number(lastFullRun.durationMs || 0) / 60_000));
+  target.textContent = `Dernier scan complet : ${when} · ${checked}/${expected} · ${durationMinutes} min`;
+  target.title = "Dernier parcours de toute la liste terminé sans erreur sur cet appareil.";
+}
 
 function renderHeader(items, lastRun) {
   const counts = { accepted: 0, to_review: 0 };

@@ -257,6 +257,10 @@
         background: var(--brand);
         box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 14%, transparent);
       }
+      .status-line.full-run::before {
+        background: #22a06b;
+        box-shadow: 0 0 0 4px color-mix(in srgb, #22a06b 14%, transparent);
+      }
       .wave-countdown {
         display: grid;
         grid-template-columns: auto 1fr;
@@ -1154,6 +1158,7 @@
         </div>
 
         <div class="status-wrap">
+          <div class="status-line full-run" id="last-full-run">Dernier scan complet : aucun</div>
           <div class="status-line" id="next-check">Prochaine action automatique : —</div>
           <div class="wave-countdown" id="wave-countdown">
             <span class="wave-countdown-icon" aria-hidden="true">🌊</span>

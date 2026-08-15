@@ -45,6 +45,7 @@ globalThis.chrome = {
     onStartup: { addListener: noop },
     sendMessage: asyncNoop,
     getURL: (p) => `chrome-extension://test/${p}`,
+    getManifest: () => ({ version: "0.1.37" }),
   },
   action: { setBadgeBackgroundColor: asyncNoop, setBadgeText: asyncNoop, setTitle: asyncNoop },
   alarms: { get: async () => null, create: noop, clear: asyncNoop, onAlarm: evt() },
@@ -465,6 +466,42 @@ await test("ne contrôle aucun produit absent de la watchlist", async () => {
   assert.deepEqual(calls, []);
 });
 
+await test("mémorise et transmet un parcours complet réussi sans requête dédiée", async () => {
+  store.customUrls = [{ url: URL_A, name: "Fixture complète" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = true;
+  let feedbackPayload = null;
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      return { ok: true, status: 200, url, text: async () => amazonFixture("normal-product.html") };
+    }
+    if (String(url).endsWith("/api/extension/feedback/batch")) {
+      feedbackPayload = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    return defaultFetch(url, options);
+  };
+
+  const result = await dispatch({ type: "check-now" });
+
+  assert.equal(result.checked, 1);
+  assert.equal(feedbackPayload.items.length, 1);
+  assert.deepEqual(feedbackPayload.scanSummary, {
+    runKind: "full",
+    outcome: "completed",
+    extensionVersion: "0.1.37",
+    checked: 1,
+    expected: 1,
+    errors: 0,
+    startedAt: feedbackPayload.scanSummary.startedAt,
+    completedAt: feedbackPayload.scanSummary.completedAt,
+    durationMs: feedbackPayload.scanSummary.durationMs,
+  });
+  assert.equal(store.lastFullRun.checked, 1);
+  assert.equal(store.lastFullRun.expected, 1);
+  assert.equal(store.lastFullRun.errors, 0);
+});
+
 await test("annule un check en cours et nettoie sa progression", async () => {
   store.customUrls = [{ url: URL_A, name: "Fixture lente" }];
   store.trackPokemonTcgFr = false;
@@ -494,11 +531,12 @@ await test("reprend les produits restants et bloque les relances trop rapides", 
   store.customUrls = [{ url: URL_A, name: "Déjà fait" }, { url: URL_B, name: "À reprendre" }];
   store.trackPokemonTcgFr = false;
   store.communityDataEnabled = false;
+  store.lastFullRun = { ts: 123, checked: 2, expected: 2, errors: 0, durationMs: 1000 };
   store.checkResume = { urls: [URL_B], createdAt: Date.now() };
   const calls = [];
   globalThis.fetch = async (url) => {
     calls.push(url);
-    return { ok: true, status: 200, url, text: async () => amazonFixture("not-invitation.html") };
+    return { ok: true, status: 200, url, text: async () => amazonFixture("normal-product.html") };
   };
 
   const resumed = await dispatch({ type: "check-now" });
@@ -507,6 +545,7 @@ await test("reprend les produits restants et bloque les relances trop rapides", 
   assert.equal(resumed.resumed, true);
   assert.deepEqual(calls, [URL_B]);
   assert.equal(store.checkResume, undefined);
+  assert.equal(store.lastFullRun.ts, 123, "une reprise partielle ne remplace pas le dernier scan complet");
   assert.equal(blocked.error, "cooldown");
   assert.ok(blocked.retryAfterMs > 0 && blocked.retryAfterMs <= 15_000);
 });

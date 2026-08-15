@@ -909,9 +909,9 @@ async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeS
   }
 }
 
-async function sendFeedbackBatch(items) {
+async function sendFeedbackBatch(items, scanSummary = null) {
   const { communityDataEnabled } = await getSettings();
-  if (!communityDataEnabled || !items?.length) return { skipped: true };
+  if (!communityDataEnabled || (!items?.length && !scanSummary)) return { skipped: true };
   const now = Date.now();
   const bucket = Math.floor(now / TELEMETRY_DEDUPE_MS);
   const stored = await chrome.storage.local.get(FEEDBACK_SENT_STORAGE_KEY);
@@ -934,14 +934,20 @@ async function sendFeedbackBatch(items) {
       url: item.url,
     });
   }
-  if (!pending.length) return { deduped: true };
+  if (!pending.length && !scanSummary) return { deduped: true };
   let sentCount = 0;
   try {
     const instanceId = await getInstanceId();
+    const chunks = [];
     for (let index = 0; index < pending.length; index += 50) {
-      const chunk = pending.slice(index, index + 50);
+      chunks.push(pending.slice(index, index + 50));
+    }
+    if (!chunks.length) chunks.push([]);
+    for (let index = 0; index < chunks.length; index++) {
+      const chunk = chunks[index];
       const body = JSON.stringify({
         items: chunk.map(({ dedupeKey: _dedupeKey, url: _url, ...item }) => item),
+        ...(index === chunks.length - 1 && scanSummary ? { scanSummary } : {}),
       });
       const timeout = withTimeout();
       const response = await authenticatedFetch(`${API_BASE}${FEEDBACK_BATCH_PATH}`, {
@@ -964,7 +970,7 @@ async function sendFeedbackBatch(items) {
     );
     for (const item of pending) freshBuckets[item.dedupeKey] = now;
     await chrome.storage.local.set({ [FEEDBACK_SENT_STORAGE_KEY]: freshBuckets });
-    return { sent: pending.length };
+    return { sent: pending.length, scanSummary: !!scanSummary };
   } catch (error) {
     // Compatibilité avec le backend de production tant que la nouvelle route
     // batch n'est pas déployée : les anciennes routes restent utilisables.
@@ -1767,6 +1773,8 @@ async function runCheck({ force = false, scheduled = false, customOnly = false, 
 }
 
 async function runCheckOnce({ force = false, scheduled = false, customOnly = false, onlyUrls = null, signal = null } = {}) {
+  const runStartedAt = Date.now();
+  const runKind = !customOnly && !Array.isArray(onlyUrls) ? "full" : "partial";
   const summary = { checked: 0, errors: 0, items: [] };
   const feedbackItems = [];
   await chrome.storage.local.set({
@@ -1778,7 +1786,19 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
   catch (e) {
     summary.errors = 1;
     summary.fatal = String(e);
-    await chrome.storage.local.set({ lastRun: { ts: Date.now(), ...summary } });
+    const completedAt = Date.now();
+    await sendFeedbackBatch([], {
+      runKind,
+      outcome: "failed",
+      extensionVersion: chrome.runtime.getManifest?.()?.version || "0.0.0",
+      checked: 0,
+      expected: 0,
+      errors: 1,
+      startedAt: Math.floor(runStartedAt / 1000),
+      completedAt: Math.floor(completedAt / 1000),
+      durationMs: completedAt - runStartedAt,
+    });
+    await chrome.storage.local.set({ lastRun: { ts: completedAt, ...summary } });
     await chrome.storage.local.remove("checkProgress");
     return summary;
   }
@@ -1967,8 +1987,37 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
   } else {
     await chrome.storage.local.remove("checkResume");
   }
-  await sendFeedbackBatch(feedbackItems);
-  await chrome.storage.local.set({ lastRun: { ts: Date.now(), ...summary } });
+  const completedAt = Date.now();
+  const outcome = summary.cancelled
+    ? "cancelled"
+    : summary.blocked
+      ? "blocked"
+      : summary.errors > 0 || summary.checked !== watchlist.length
+        ? "failed"
+        : "completed";
+  const scanSummary = watchlist.length > 0 ? {
+    runKind,
+    outcome,
+    extensionVersion: chrome.runtime.getManifest?.()?.version || "0.0.0",
+    checked: summary.checked,
+    expected: watchlist.length,
+    errors: summary.errors,
+    startedAt: Math.floor(runStartedAt / 1000),
+    completedAt: Math.floor(completedAt / 1000),
+    durationMs: completedAt - runStartedAt,
+  } : null;
+  await sendFeedbackBatch(feedbackItems, scanSummary);
+  const storageUpdate = { lastRun: { ts: completedAt, ...summary } };
+  if (runKind === "full" && outcome === "completed" && watchlist.length > 0) {
+    storageUpdate.lastFullRun = {
+      ts: completedAt,
+      checked: summary.checked,
+      expected: watchlist.length,
+      errors: 0,
+      durationMs: completedAt - runStartedAt,
+    };
+  }
+  await chrome.storage.local.set(storageUpdate);
   await chrome.storage.local.remove("checkProgress");
   await updateActionBadge();
   return summary;

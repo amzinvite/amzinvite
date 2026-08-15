@@ -1,6 +1,6 @@
 # Privacy Policy — amzinvite
 
-**Dernière mise à jour :** 2026-08-12
+**Dernière mise à jour :** 2026-08-15
 
 amzinvite est conçu pour fonctionner avec un minimum de données.
 
@@ -13,7 +13,7 @@ Les informations suivantes restent dans le navigateur :
 - `autoRequest`, `communityDataEnabled`, `trackPokemonTcgFr`, `notificationsEnabled`, `soundEnabled` : préférences de l'extension
 - `customUrls` : liens Amazon ajoutés manuellement
 - `knownStates` : états détectés pour les produits suivis
-- `publicFeed`, `lastRun`, `checkProgress`, `autoSpawnLog` : données internes de fonctionnement
+- `publicFeed`, `lastRun`, `lastFullRun`, `checkProgress`, `autoSpawnLog` : données internes de fonctionnement
 
 Un reset complet est disponible depuis le popup.
 
@@ -28,6 +28,8 @@ L'extension récupère la liste publique des produits en mode invitation.
 Quand l'option de partage anonyme est activée, l'extension peut envoyer :
 
 - des changements d'état des invitations suivies
+- un résumé technique du cycle (complet ou partiel, résultat, nombre de produits
+  parcourus, erreurs, horaires, durée et version de l'extension)
 
 Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent pas de nom, d'email ou d'informations de paiement.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.37] — suivi des scans complets
+
+### Features
+- Affiche la date, la couverture et la durée du dernier parcours complet réussi sur l'appareil.
+- Transmet un résumé agrégé du cycle avec le lot de résultats existant afin de mesurer la couverture réelle sans ajouter de requête réseau sur un scan normal.
+
 ## [0.1.35] — contrôle des notifications
 
 ### Features

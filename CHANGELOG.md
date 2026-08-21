@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.39] — alertes d'invitation explicites
+
+### Fixes
+- Remplace l'alerte ambiguë « Invitation dispo » par « Demande d'invitation ouverte » lorsqu'Amazon permet seulement de déposer une demande.
+- Évite cette seconde alerte lorsque l'auto-demande vient de réussir ; seule la confirmation d'auto-demande est alors affichée.
+- Confirme sur la fiche Amazon les redemandes après expiration avant d'annoncer leur succès, sans ajouter d'événement backend ni de charge D1.
+- Affiche la miniature du produit dans les notifications natives, avec retour sur l'icône amzinvite si l'image Amazon n'est pas exploitable.
+- Harmonise les badges en « Demande ouverte » et restaure la détection textuelle des sélections sur les anciennes variantes de buybox Amazon.
+- Migre les anciennes alertes ambiguës déjà stockées, interrompt un cycle sur HTTP 503 et ajoute un coupe-circuit après trois erreurs consécutives.
+- Ajoute une analyse statique `no-undef` obligatoire à la recette de release afin de bloquer les références JavaScript inexistantes.
+
 ## [0.1.38] — correction du contrôle Amazon
 
 ### Fixes

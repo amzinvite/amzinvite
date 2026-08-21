@@ -14,7 +14,7 @@
   ];
 
   const STATE_UI = {
-    available:         { icon: "🎟️", label: "Dispo à demander",      color: "#fff", accent: "#b45309", bg: "linear-gradient(135deg,#d97706,#b45309)" },
+    available:         { icon: "🎟️", label: "Demande ouverte",       color: "#fff", accent: "#b45309", bg: "linear-gradient(135deg,#d97706,#b45309)" },
     already_requested: { icon: "⏳", label: "Invitation demandée",   color: "#fff", accent: "#1e40af", bg: "linear-gradient(135deg,#2563eb,#1e40af)" },
     accepted:          { icon: "🎉", label: "Sélectionné — 72h !",   color: "#fff", accent: "#065f46", bg: "linear-gradient(135deg,#059669,#047857)" },
   };

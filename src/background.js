@@ -11,7 +11,11 @@
 //   4. AUTO-REQUEST : opt-in avec disclaimer. POST direct à l'endpoint
 //                     d'invitation Amazon. Aucune fenêtre ouverte, aucun clic
 
-import { detectInvitationState, extractBuyboxText } from "./detector.js";
+import {
+  detectInvitationState,
+  extractBuyboxText,
+  isRequestableExpiredInvitation,
+} from "./detector.js";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -48,7 +52,10 @@ const REQUEST_LONG_PAUSE_MIN_MS = 25_000;
 const REQUEST_LONG_PAUSE_MAX_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 25_000;
 const MANUAL_CHECK_COOLDOWN_MS = 15_000;
+const MAX_CONSECUTIVE_SCAN_ERRORS = 3;
 const AUTO_SPAWN_COOLDOWN_MS = 60 * 60 * 1000;
+const AUTO_REQUEST_CONFIRMATION_DELAY_MS = 1_000;
+const AUTO_REQUEST_PENDING_RETRY_MS = 5 * 60 * 1000;
 const ALREADY_REQUESTED_RECHECK_MS = 4 * 60 * 60 * 1000;
 const FEED_REFRESH_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_SMART_SYNC_MIN = 6 * 60;
@@ -680,6 +687,55 @@ function extractProductImageFromHtml(html) {
   return null;
 }
 
+function notificationImageFetchUrl(productUrl, imageUrl) {
+  const marketplace = marketplaceFromUrl(productUrl);
+  if (!marketplace || !imageUrl) return null;
+  let parsed;
+  try { parsed = new URL(imageUrl); }
+  catch { return null; }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "m.media-amazon.com") return null;
+  if (!parsed.pathname.startsWith("/images/I/")) return null;
+  const resizedPath = parsed.pathname.replace(
+    /(?:\._[^/]+_)?\.(jpe?g|png|webp)$/i,
+    "._AC_SX128_.$1",
+  );
+  return `${MARKETPLACES[marketplace].origin}${resizedPath}`;
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+async function productNotificationIconUrl(productUrl, preferredImageUrl = null) {
+  let imageUrl = preferredImageUrl;
+  if (!imageUrl) {
+    const key = productKey(productUrl);
+    const { knownImages } = await chrome.storage.local.get("knownImages");
+    imageUrl = key ? knownImages?.[key] : null;
+  }
+  const fetchUrl = notificationImageFetchUrl(productUrl, imageUrl);
+  if (!fetchUrl) return "icons/icon128.png";
+  try {
+    const response = await fetch(fetchUrl, {
+      credentials: "omit",
+      redirect: "follow",
+      cache: "force-cache",
+    });
+    if (!response.ok) return "icons/icon128.png";
+    const contentType = String(response.headers?.get?.("content-type") || "").split(";")[0].trim();
+    if (!contentType.startsWith("image/")) return "icons/icon128.png";
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!bytes.length || bytes.length > 512 * 1024) return "icons/icon128.png";
+    return `data:${contentType};base64,${bytesToBase64(bytes)}`;
+  } catch (_) {
+    return "icons/icon128.png";
+  }
+}
+
 async function storeKnownImage(url, html) {
   const key = productKey(url);
   if (!key) return;
@@ -762,15 +818,18 @@ async function openNotificationProduct(notificationId) {
   await forgetNotificationUrl(notificationId);
 }
 
-async function createProductNotification(kind, { url, title, message, priority = 1 }) {
+async function createProductNotification(kind, {
+  url, title, message, priority = 1, imageUrl = null,
+}) {
   if (!url) return;
   const { notificationsEnabled } = await getSettings();
   if (notificationsEnabled) {
     const notificationId = productNotificationId(kind, url);
     await rememberNotificationUrl(notificationId, url);
+    const iconUrl = await productNotificationIconUrl(url, imageUrl);
     await chrome.notifications.create(notificationId, {
       type: "basic",
-      iconUrl: "icons/icon128.png",
+      iconUrl,
       title,
       message,
       priority,
@@ -1018,12 +1077,27 @@ async function requestInvitationDirect(creds) {
   return { ok: r.ok, status: r.status, body: text.slice(0, 500) };
 }
 
+async function confirmExpiredAutoRequest(url, signal) {
+  if (!(await sleep(AUTO_REQUEST_CONFIRMATION_DELAY_MS, signal))) {
+    throw new Error("confirmation_cancelled");
+  }
+  const html = await fetchAmazonPage(url, signal, { bypassCache: true });
+  if (isAmazonBlockPage(html)) throw new Error("amazon captcha");
+  if (isStub(html)) throw new Error("confirmation_stub_no_data");
+  const { text, doc, rawHtml } = extractBuyboxText(html);
+  return { state: detectInvitationState(text, doc, rawHtml), html };
+}
+
 async function shouldAutoSpawn(url) {
   const { autoRequest } = await getSettings();
   if (!autoRequest) return false;
-  const { autoSpawnLog } = await chrome.storage.local.get("autoSpawnLog");
+  const { autoSpawnLog, autoRequestPendingLog } = await chrome.storage.local.get([
+    "autoSpawnLog", "autoRequestPendingLog",
+  ]);
   const last = (autoSpawnLog || {})[url];
-  return !(last && Date.now() - last < AUTO_SPAWN_COOLDOWN_MS);
+  const pending = (autoRequestPendingLog || {})[url];
+  return !(last && Date.now() - last < AUTO_SPAWN_COOLDOWN_MS)
+    && !(pending && Date.now() - pending < AUTO_REQUEST_PENDING_RETRY_MS);
 }
 
 async function markAutoSpawned(url) {
@@ -1032,6 +1106,25 @@ async function markAutoSpawned(url) {
   log[url] = Date.now();
   const entries = Object.entries(log).sort((a, b) => b[1] - a[1]).slice(0, 100);
   await chrome.storage.local.set({ autoSpawnLog: Object.fromEntries(entries) });
+}
+
+async function markAutoRequestPending(url) {
+  const { autoRequestPendingLog } = await chrome.storage.local.get("autoRequestPendingLog");
+  const log = { ...(autoRequestPendingLog || {}), [url]: Date.now() };
+  const entries = Object.entries(log).sort((a, b) => b[1] - a[1]).slice(0, 100);
+  await chrome.storage.local.set({ autoRequestPendingLog: Object.fromEntries(entries) });
+}
+
+async function clearAutoRequestPending(url) {
+  const { autoRequestPendingLog } = await chrome.storage.local.get("autoRequestPendingLog");
+  if (!autoRequestPendingLog?.[url]) return;
+  const next = { ...autoRequestPendingLog };
+  delete next[url];
+  if (Object.keys(next).length) {
+    await chrome.storage.local.set({ autoRequestPendingLog: next });
+  } else {
+    await chrome.storage.local.remove("autoRequestPendingLog");
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1052,7 +1145,7 @@ function withTimeout(ms = REQUEST_TIMEOUT_MS, externalSignal = null) {
   };
 }
 
-async function fetchAmazonPage(url, externalSignal = null) {
+async function fetchAmazonPage(url, externalSignal = null, { bypassCache = false } = {}) {
   const marketplace = marketplaceFromUrl(url);
   if (!marketplace) throw new Error("Marketplace Amazon non supportée");
   const timeout = withTimeout(REQUEST_TIMEOUT_MS, externalSignal);
@@ -1060,6 +1153,7 @@ async function fetchAmazonPage(url, externalSignal = null) {
     credentials: "include",
     redirect: "follow",
     signal: timeout.signal,
+    ...(bypassCache ? { cache: "no-store" } : {}),
     headers: { "Accept-Language": `${MARKETPLACES[marketplace].locale},fr;q=0.9,en;q=0.6` },
   }).finally(timeout.done);
   if (!r.ok) throw new Error(`amazon HTTP ${r.status}`);
@@ -1324,11 +1418,11 @@ async function setupOriginRewrite() {
   }
 }
 
-async function migrateMarketplaceStorage() {
+export async function migrateMarketplaceStorage() {
   await chrome.storage.local.remove("intervalMin");
-  const { marketplaceStorageVersion, knownStates, knownImages, knownExpiry, stateCheckedAt } =
+  const { marketplaceStorageVersion, knownStates, knownImages, knownExpiry, stateCheckedAt, localAlerts } =
     await chrome.storage.local.get([
-      "marketplaceStorageVersion", "knownStates", "knownImages", "knownExpiry", "stateCheckedAt",
+      "marketplaceStorageVersion", "knownStates", "knownImages", "knownExpiry", "stateCheckedAt", LOCAL_ALERTS_STORAGE_KEY,
     ]);
   const patch = {};
   if (marketplaceStorageVersion < 2) {
@@ -1340,6 +1434,22 @@ async function migrateMarketplaceStorage() {
       }
       patch[name] = migrated;
     }
+  }
+  if (Array.isArray(localAlerts)) {
+    let alertsChanged = false;
+    const migratedAlerts = localAlerts.map((alert) => {
+      if (alert?.kind !== "available" || !/Invitation dispo/i.test(String(alert.title || ""))) return alert;
+      alertsChanged = true;
+      const title = "🎟️ Demande d'invitation ouverte";
+      const baseMessage = String(alert.message || "").replace(/\s+—\s+tu peux demander l'invitation$/i, "");
+      return {
+        ...alert,
+        title,
+        message: `${baseMessage} — tu peux demander l'invitation`,
+        dedupeKey: `available:${alert.url || ""}:${title}`,
+      };
+    });
+    if (alertsChanged) patch[LOCAL_ALERTS_STORAGE_KEY] = migratedAlerts;
   }
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
 }
@@ -1806,6 +1916,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
   let requestsSinceLongPause = 0;
   let longPauseAfter = secureRandomInt(3, 7);
   let resumeFromIndex = 0;
+  let consecutiveErrors = 0;
 
   for (let i = 0; i < watchlist.length; i++) {
     if (signal?.aborted) {
@@ -1829,6 +1940,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         const lastCheckedAt = await getLastStateCheckAt(it.url);
         if (lastCheckedAt && Date.now() - lastCheckedAt < ALREADY_REQUESTED_RECHECK_MS) {
           summary.items.push({ url: it.url, state: it.known_state, skipped: true, reason: "recently_checked" });
+          consecutiveErrors = 0;
           resumeFromIndex = i + 1;
           continue;
         }
@@ -1837,6 +1949,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
       const html = await fetchAmazonPage(it.url, signal);
       if (isAmazonBlockPage(html)) throw new Error("amazon captcha");
       if (isStub(html)) {
+        consecutiveErrors = 0;
         summary.items.push({ url: it.url, state: "stub_no_data" });
         if (i < watchlist.length - 1) {
           const delay = randomInterProductDelay(++requestsSinceLongPause >= longPauseAfter);
@@ -1865,9 +1978,12 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         continue;
       }
 
+      const productImageUrl = extractProductImageFromHtml(html) || it.image_url || null;
       storeKnownImage(it.url, html).catch(() => {});
       const { text, doc, rawHtml } = extractBuyboxText(html);
         const state = detectInvitationState(text, doc, rawHtml);
+        const isExpiredRedemand = state === "available"
+          && isRequestableExpiredInvitation(doc, rawHtml);
         const asin = asinFromUrl(it.url);
         const prevState = it.known_state || null;
         await setKnownState(it.url, state);
@@ -1876,6 +1992,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         feedbackItems.push({ url: it.url, state, source: "bg_check" });
         summary.checked++;
         summary.items.push({ url: it.url, state });
+        let effectiveState = state;
 
         // Auto-request si available + opt-in + cooldown OK
         if (state === "available" && (await shouldAutoSpawn(it.url))) {
@@ -1885,17 +2002,46 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
             try {
               const result = await requestInvitationDirect(creds);
               if (result.ok) {
-                await markAutoSpawned(it.url);
-                await setKnownState(it.url, "already_requested");
-                feedbackItems.push({ url: it.url, state: "already_requested", source: "auto_request" });
-                summary.items[summary.items.length - 1].autoSuccess = true;
-                summary.items[summary.items.length - 1].state = "already_requested";
-                await createProductNotification("auto_request", {
-                  url: it.url,
-                  title: "🤖 Invitation demandée automatiquement",
-                  message: it.name || asin,
-                  priority: 2,
-                });
+                let confirmedState = "already_requested";
+                let confirmationHtml = null;
+                let autoConfirmed = !isExpiredRedemand;
+                if (isExpiredRedemand) {
+                  try {
+                    const confirmation = await confirmExpiredAutoRequest(it.url, signal);
+                    confirmedState = confirmation.state;
+                    confirmationHtml = confirmation.html;
+                    autoConfirmed = confirmedState === "already_requested"
+                      || confirmedState === "accepted";
+                  } catch (confirmationError) {
+                    summary.items[summary.items.length - 1].autoError = `amazon confirmation ${String(confirmationError)}`;
+                  }
+                }
+
+                if (autoConfirmed) {
+                  await clearAutoRequestPending(it.url);
+                  await markAutoSpawned(it.url);
+                  await setKnownState(it.url, confirmedState);
+                  if (confirmedState === "accepted") {
+                    await setKnownExpiry(it.url, extractExpiryTextFromHtml(confirmationHtml));
+                  }
+                  feedbackItems.push({ url: it.url, state: confirmedState, source: "auto_request" });
+                  summary.items[summary.items.length - 1].autoSuccess = true;
+                  summary.items[summary.items.length - 1].state = confirmedState;
+                  effectiveState = confirmedState;
+                  if (confirmedState === "already_requested") {
+                    await createProductNotification("auto_request", {
+                      url: it.url,
+                      title: "🤖 Invitation demandée automatiquement",
+                      message: it.name || asin,
+                      priority: 2,
+                      imageUrl: productImageUrl,
+                    });
+                  }
+                } else {
+                  await markAutoRequestPending(it.url);
+                  summary.items[summary.items.length - 1].autoPending = true;
+                  summary.items[summary.items.length - 1].autoError ||= "amazon confirmation unconfirmed";
+                }
               } else {
                 summary.items[summary.items.length - 1].autoError = `amazon HTTP ${result.status}`;
               }
@@ -1909,32 +2055,40 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         }
 
         // Notif seulement lors des transitions actionnables pour eviter le spam.
-        if (state === "accepted" && prevState !== "accepted") {
+        if (effectiveState === "accepted" && prevState !== "accepted") {
           await createProductNotification("accepted", {
             url: it.url,
             title: "🎉 Tu es sélectionné !",
             message: `${it.name || asin} — clique pour acheter (72h max)`,
             priority: 2,
+            imageUrl: productImageUrl,
           });
           await playAlertSound("accepted");
-        } else if (state === "available" && prevState !== "available") {
+        } else if (effectiveState === "available" && prevState !== "available") {
           await createProductNotification("available", {
             url: it.url,
-            title: "🎟️ Invitation dispo",
-            message: it.name || asin,
+            title: "🎟️ Demande d'invitation ouverte",
+            message: `${it.name || asin} — tu peux demander l'invitation`,
             priority: 1,
+            imageUrl: productImageUrl,
           });
           await playAlertSound("available");
         }
+        consecutiveErrors = 0;
     } catch (e) {
       summary.errors++;
+      consecutiveErrors++;
       summary.items.push({ url: it.url, error: String(e) });
       if (signal?.aborted) {
         summary.cancelled = true;
         break;
       }
-      if (/amazon HTTP (403|429)|captcha/i.test(String(e))) {
+      if (/amazon HTTP (403|429|503)|captcha/i.test(String(e))
+        || consecutiveErrors >= MAX_CONSECUTIVE_SCAN_ERRORS) {
         summary.blocked = true;
+        summary.haltReason = /amazon HTTP (403|429|503)|captcha/i.test(String(e))
+          ? String(e)
+          : "consecutive_errors";
         break;
       }
     }

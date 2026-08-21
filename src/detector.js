@@ -144,7 +144,7 @@ function findMatchingDivClose(html, openTagEnd) {
   return -1;
 }
 
-function detectHdpStateFromHtml(html) {
+function findFilledHdpBlockFromHtml(html) {
   if (!html) return null;
   for (const { id, state } of HDP_STATE_BLOCKS) {
     // Match strict de l'attribut `id` (avec espace devant), pour ne pas
@@ -159,13 +159,32 @@ function detectHdpStateFromHtml(html) {
     // Strip tags + whitespace pour mesurer le vrai contenu textuel.
     const size = inner.replace(/<[^>]+>/g, "").replace(/\s+/g, "").length;
     if (size >= HDP_FILLED_MIN_CHARS) {
-      if (state === "expired") {
-        return expiredCanBeRequestedFromHtml(inner, html) ? "available" : "already_requested";
-      }
-      return state;
+      return { state, inner };
     }
   }
   return null;
+}
+
+function detectHdpStateFromHtml(html) {
+  const block = findFilledHdpBlockFromHtml(html);
+  if (!block) return null;
+  if (block.state === "expired") {
+    return expiredCanBeRequestedFromHtml(block.inner, html) ? "available" : "already_requested";
+  }
+  return block.state;
+}
+
+// Permet au service worker de durcir uniquement la redemande après expiration,
+// sans ajouter un nouvel état public ni modifier la détection des demandes
+// initiales. La confirmation post-POST reste ainsi ciblée sur le cas à risque.
+export function isRequestableExpiredInvitation(doc, rawHtml) {
+  if (doc) {
+    const el = doc.getElementById?.("hdp_expired_desktop");
+    return blockHasContent(el) && expiredCanBeRequestedFromDom(el);
+  }
+  const block = findFilledHdpBlockFromHtml(rawHtml);
+  return block?.state === "expired"
+    && expiredCanBeRequestedFromHtml(block.inner, rawHtml);
 }
 
 export function detectInvitationState(rootText, doc, rawHtml) {
@@ -194,6 +213,11 @@ export function detectInvitationState(rootText, doc, rawHtml) {
 
   // 2) Fallback texte/sélecteurs pour les pages au format historique.
   const txt = (rootText || "").toLowerCase();
+  // Une sélection prime toujours sur les traces de la demande initiale :
+  // certaines buybox historiques conservent les deux textes dans le DOM.
+  if (ACCEPTED_PHRASES.some((p) => txt.includes(p))) {
+    return "accepted";
+  }
   if (REQUESTED_PHRASES.some((p) => txt.includes(p))) {
     return "already_requested";
   }

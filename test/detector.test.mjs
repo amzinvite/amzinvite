@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { detectInvitationState } from "../src/detector.js";
+import {
+  detectInvitationState,
+  isRequestableExpiredInvitation,
+} from "../src/detector.js";
 
 const padding = "Invitation expirée. ".repeat(40);
 
@@ -18,17 +21,39 @@ assert.equal(
   "available",
   "une invitation expirée avec bouton et identifiants Amazon doit pouvoir être redemandée",
 );
+assert.equal(
+  isRequestableExpiredInvitation(null, expiredHtml({ requestable: true })),
+  true,
+  "le service worker doit pouvoir cibler la confirmation d'une redemande expirée",
+);
 
 assert.equal(
   detectInvitationState("", null, expiredHtml({ requestable: false })),
   "already_requested",
   "une invitation expirée sans action possible ne doit pas déclencher l'auto-demande",
 );
+assert.equal(
+  isRequestableExpiredInvitation(null, expiredHtml({ requestable: false })),
+  false,
+  "une expiration non actionnable ne doit pas entrer dans le parcours de confirmation",
+);
 
 assert.equal(
   detectInvitationState("", null, `<div id="hdp_expired_desktop">${padding}<button>Demander une invitation</button></div>`),
   "already_requested",
   "le texte du bouton seul ne suffit pas sans identifiants de requête Amazon",
+);
+
+assert.equal(
+  detectInvitationState("Vous avez été sélectionné. Vous avez demandé une invitation.", null, null),
+  "accepted",
+  "une sélection doit primer sur le rappel de la demande dans une buybox historique",
+);
+
+assert.equal(
+  detectInvitationState("Your invitation has been accepted", null, null),
+  "accepted",
+  "le fallback historique anglais doit reconnaître une sélection",
 );
 
 console.log("  ✓ invitations expirées : redemande seulement quand elle est réellement actionnable");

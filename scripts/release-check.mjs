@@ -7,14 +7,17 @@ const run = (command, args, cwd = root) => {
   if (result.status !== 0) process.exit(result.status || 1);
 };
 
-console.log("1/4 Syntaxe JavaScript");
+console.log("1/5 Syntaxe JavaScript");
 for (const dir of ["src", "test", "scripts"]) {
   for (const file of readdirSync(new URL(`../${dir}/`, import.meta.url))) {
     if (file.endsWith(".js") || file.endsWith(".mjs")) run(process.execPath, ["--check", `${dir}/${file}`]);
   }
 }
 
-console.log("2/4 Manifest");
+console.log("2/5 Analyse statique");
+run(process.execPath, ["node_modules/eslint/bin/eslint.js", "src", "test", "scripts"]);
+
+console.log("3/5 Manifest");
 const manifest = JSON.parse(readFileSync(new URL("../src/manifest.json", import.meta.url), "utf8"));
 if (manifest.manifest_version !== 3) throw new Error("manifest_version doit valoir 3");
 if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error("version du manifest invalide");
@@ -22,10 +25,10 @@ for (const required of ["background.js", "detector.js", "content.js", "popup.js"
   readFileSync(new URL(`../src/${required}`, import.meta.url));
 }
 
-console.log("3/4 Tests automatisés");
+console.log("4/5 Tests automatisés");
 run(process.execPath, ["scripts/run-tests.mjs"]);
 
-console.log("4/4 Confidentialité des fixtures");
+console.log("5/5 Confidentialité des fixtures");
 const fixtureDir = new URL("../test/fixtures/amazon/", import.meta.url);
 const forbidden = [/@[a-z0-9.-]+\.[a-z]{2,}/i, /session-id/i, /at-acb/i, /sess-at/i, /x-amz-access-token/i];
 for (const file of readdirSync(fixtureDir).filter((name) => name.endsWith(".html"))) {

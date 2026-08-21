@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 
 const popup = await readFile(new URL("../src/popup.html", import.meta.url), "utf8");
 const popupJs = await readFile(new URL("../src/popup.js", import.meta.url), "utf8");
+const contentJs = await readFile(new URL("../src/content.js", import.meta.url), "utf8");
+const backgroundJs = await readFile(new URL("../src/background.js", import.meta.url), "utf8");
 
 assert.match(popup, /id="autoRequestPrompt" hidden/);
 assert.match(popup, /id="enableAutoRequest"/);
@@ -19,6 +21,13 @@ assert.match(popup, /href="https:\/\/x\.com\/amzinvite"/);
 assert.match(popup, /href="https:\/\/www\.tiktok\.com\/@amzinvite"/);
 assert.match(popup, /id="notificationsEnabled"/);
 assert.match(popupJs, /notificationsEnabled/);
+assert.match(popupJs, /available: \{ txt: "Demande ouverte"/);
+assert.match(contentJs, /label: "Demande ouverte"/);
+assert.match(backgroundJs, /title: "🎟️ Demande d'invitation ouverte"/);
+assert.match(backgroundJs, /title: "🎉 Tu es sélectionné !"/);
+for (const source of [popupJs, contentJs, backgroundJs]) {
+  assert.doesNotMatch(source, /title:\s*"🎟️ Invitation dispo"/, "le runtime ne doit plus émettre l'ancien titre ambigu");
+}
 assert.match(popup, /class="prixtcg-persistent-link"/);
 assert.match(popup, /class="fixed-header"/);
 assert.match(popup, /class="content-scroll"/);

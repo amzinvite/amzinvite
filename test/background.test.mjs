@@ -45,7 +45,7 @@ globalThis.chrome = {
     onStartup: { addListener: noop },
     sendMessage: asyncNoop,
     getURL: (p) => `chrome-extension://test/${p}`,
-    getManifest: () => ({ version: "0.1.38" }),
+    getManifest: () => ({ version: "0.1.39" }),
   },
   action: { setBadgeBackgroundColor: asyncNoop, setBadgeText: asyncNoop, setTitle: asyncNoop },
   alarms: { get: async () => null, create: noop, clear: asyncNoop, onAlarm: evt() },
@@ -269,6 +269,26 @@ await test("mémorise la vague historique au premier bootstrap sans la notifier"
   } finally {
     chrome.notifications.create = originalCreate;
   }
+});
+
+await test("migre les anciennes alertes disponibles vers un libellé explicite", async () => {
+  store.marketplaceStorageVersion = 2;
+  store.localAlerts = [{
+    id: "alert-old",
+    kind: "available",
+    title: "🎟️ Invitation dispo",
+    message: "Produit historique",
+    url: URL_A,
+    dedupeKey: `available:${URL_A}:🎟️ Invitation dispo`,
+    createdAt: Date.now(),
+    read: false,
+  }];
+
+  await backgroundModule.migrateMarketplaceStorage();
+
+  assert.equal(store.localAlerts[0].title, "🎟️ Demande d'invitation ouverte");
+  assert.equal(store.localAlerts[0].message, "Produit historique — tu peux demander l'invitation");
+  assert.match(store.localAlerts[0].dedupeKey, /Demande d'invitation ouverte$/);
 });
 
 await test("expose, marque comme lues et efface les alertes locales", async () => {
@@ -537,7 +557,7 @@ await test("mémorise et transmet un parcours complet réussi sans requête déd
   assert.deepEqual(feedbackPayload.scanSummary, {
     runKind: "full",
     outcome: "completed",
-    extensionVersion: "0.1.38",
+    extensionVersion: "0.1.39",
     checked: 1,
     expected: 1,
     errors: 0,
@@ -622,9 +642,22 @@ await test("redemande une invitation expirée actionnable et pose le cooldown ap
   store.communityDataEnabled = false;
   store.autoRequest = true;
   const html = amazonFixture("expired-requestable.html");
+  const confirmedHtml = amazonFixture("already-requested.html");
+  let getCount = 0;
   let postCount = 0;
+  const notifications = [];
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async (_id, options) => { notifications.push(options); };
   globalThis.fetch = async (url, options = {}) => {
-    if (url === URL_A) return { ok: true, status: 200, url, text: async () => html };
+    if (url === URL_A) {
+      getCount++;
+      return {
+        ok: true,
+        status: 200,
+        url,
+        text: async () => getCount === 1 ? html : confirmedHtml,
+      };
+    }
     if (options.method === "POST" && String(url).includes("highdemandproductcontracts")) {
       postCount++;
       return { ok: true, status: 200, text: async () => "{}" };
@@ -632,12 +665,329 @@ await test("redemande une invitation expirée actionnable et pose le cooldown ap
     throw new Error(`fetch inattendu: ${url}`);
   };
 
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.ok, true);
+    assert.equal(res.items[0].autoSuccess, true);
+    assert.equal(res.items[0].state, "already_requested");
+    assert.equal(getCount, 2, "une redemande expirée doit être confirmée sur la fiche");
+    assert.equal(postCount, 1);
+    assert.ok(store.autoSpawnLog?.[URL_A], "le succès doit créer un cooldown");
+    assert.equal(store.autoRequestPendingLog, undefined);
+    assert.equal(notifications.length, 1, "l'auto-demande ne doit pas doubler l'alerte");
+    assert.equal(notifications[0].title, "🤖 Invitation demandée automatiquement");
+    assert.deepEqual(store.localAlerts.map((alert) => alert.kind), ["auto_request"]);
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("ne confirme pas une redemande expirée si Amazon reste sur le bouton de demande", async () => {
+  store.customUrls = [{ url: URL_A, name: "Fixture expirée non confirmée" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = true;
+  store.autoRequest = true;
+  const html = amazonFixture("expired-requestable.html");
+  let getCount = 0;
+  let postCount = 0;
+  let feedbackBatch = null;
+  const notifications = [];
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async (_id, options) => { notifications.push(options); };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      getCount++;
+      return { ok: true, status: 200, url, text: async () => html };
+    }
+    if (options.method === "POST" && String(url).includes("highdemandproductcontracts")) {
+      postCount++;
+      return { ok: true, status: 200, text: async () => "{}" };
+    }
+    if (String(url).endsWith("/api/extension/feedback/batch")) {
+      feedbackBatch = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    return defaultFetch(url, options);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.items[0].autoSuccess, undefined);
+    assert.equal(res.items[0].autoPending, true);
+    assert.equal(res.items[0].state, "available");
+    assert.equal(getCount, 2);
+    assert.equal(postCount, 1);
+    assert.equal(store.autoSpawnLog, undefined, "une réponse non confirmée ne doit pas créer le cooldown de succès");
+    assert.ok(store.autoRequestPendingLog?.[URL_A], "un court délai local évite une boucle de POST");
+    assert.equal(
+      notifications.some((notification) => notification.title === "🤖 Invitation demandée automatiquement"),
+      false,
+    );
+    assert.equal(store.localAlerts?.some((alert) => alert.kind === "auto_request") || false, false);
+    assert.deepEqual(
+      feedbackBatch.items.map(({ state, source }) => ({ state, source })),
+      [{ state: "available", source: "bg_check" }],
+      "une redemande non confirmée ne doit pas ajouter d'écriture auto_request à D1",
+    );
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("garde localement en attente une redemande expirée dont la vérification échoue", async () => {
+  store.customUrls = [{ url: URL_A, name: "Fixture expiration ambiguë" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  store.autoRequest = true;
+  const html = amazonFixture("expired-requestable.html");
+  let getCount = 0;
+  const notifications = [];
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async (_id, options) => { notifications.push(options); };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      getCount++;
+      if (getCount === 1) return { ok: true, status: 200, url, text: async () => html };
+      return { ok: false, status: 503, url, text: async () => "" };
+    }
+    if (options.method === "POST" && String(url).includes("highdemandproductcontracts")) {
+      return { ok: true, status: 200, text: async () => "{}" };
+    }
+    throw new Error(`fetch inattendu: ${url}`);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.items[0].autoSuccess, undefined);
+    assert.equal(res.items[0].autoPending, true);
+    assert.match(res.items[0].autoError, /amazon confirmation.*503/);
+    assert.equal(store.autoSpawnLog, undefined);
+    assert.ok(store.autoRequestPendingLog?.[URL_A]);
+    assert.equal(
+      notifications.some((notification) => notification.title === "🤖 Invitation demandée automatiquement"),
+      false,
+    );
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("conserve le succès immédiat d'une première demande non expirée", async () => {
+  store.customUrls = [{ url: URL_A, name: "Première demande" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  store.autoRequest = true;
+  const html = `<input value="FIXTURE_CSRF_TOKEN" id="hdp-ib-csrf-token">
+    <input value="data.amazon.fr/custom/highdemandproductcontracts/request-invite/FIXTURE" id="hdp-ib-ajax-endpoint">
+    ${amazonFixture("available.html")}`;
+  let getCount = 0;
+  const notifications = [];
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async (_id, options) => { notifications.push(options); };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      getCount++;
+      return { ok: true, status: 200, url, text: async () => html };
+    }
+    if (options.method === "POST" && String(url).includes("highdemandproductcontracts")) {
+      return { ok: true, status: 200, text: async () => "{}" };
+    }
+    throw new Error(`fetch inattendu: ${url}`);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.items[0].autoSuccess, true);
+    assert.equal(res.items[0].state, "already_requested");
+    assert.equal(getCount, 1, "une première demande ne doit pas ajouter de GET de confirmation");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].title, "🤖 Invitation demandée automatiquement");
+    assert.equal(notifications[0].iconUrl, "icons/icon128.png");
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("présente l'état disponible comme une demande à effectuer", async () => {
+  store.customUrls = [{ url: URL_A, name: "Produit à demander" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  store.autoRequest = false;
+  const notifications = [];
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async (_id, options) => { notifications.push(options); };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      return { ok: true, status: 200, url, text: async () => amazonFixture("available.html") };
+    }
+    return defaultFetch(url, options);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.items[0].state, "available");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].title, "🎟️ Demande d'invitation ouverte");
+    assert.match(notifications[0].message, /tu peux demander l'invitation/);
+
+    store.manualCheckStartedAt = Date.now() - 16_000;
+    await dispatch({ type: "check-now" });
+    assert.equal(notifications.length, 1, "un état disponible inchangé ne doit pas renotifier");
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("réserve l'alerte de sélection à un état accepted", async () => {
+  store.customUrls = [{ url: URL_A, name: "Produit sélectionné" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  const notifications = [];
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async (_id, options) => { notifications.push(options); };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      return { ok: true, status: 200, url, text: async () => amazonFixture("accepted.html") };
+    }
+    return defaultFetch(url, options);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.items[0].state, "accepted");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].title, "🎉 Tu es sélectionné !");
+    assert.match(notifications[0].message, /clique pour acheter/);
+    assert.equal(notifications[0].requireInteraction, true);
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("utilise la miniature Amazon comme icône de notification", async () => {
+  store.customUrls = [{ url: URL_A, name: "Produit illustré" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  const sourceImage = "https://m.media-amazon.com/images/I/FIXTUREIMAGE.jpg";
+  const resizedImage = "https://www.amazon.fr/images/I/FIXTUREIMAGE._AC_SX128_.jpg";
+  const notifications = [];
+  const imageRequests = [];
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async (_id, options) => { notifications.push(options); };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      const html = `${amazonFixture("accepted.html")}<img id="landingImage" src="${sourceImage}">`;
+      return { ok: true, status: 200, url, text: async () => html };
+    }
+    if (url === resizedImage) {
+      imageRequests.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (name) => name.toLowerCase() === "content-type" ? "image/jpeg" : null },
+        arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
+      };
+    }
+    return defaultFetch(url, options);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.items[0].state, "accepted");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].iconUrl, "data:image/jpeg;base64,AQIDBA==");
+    assert.equal(imageRequests.length, 1);
+    assert.equal(imageRequests[0].options.credentials, "omit");
+    assert.equal(imageRequests[0].options.cache, "force-cache");
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("ne notifie pas un état déjà demandé", async () => {
+  store.customUrls = [{ url: URL_A, name: "Produit déjà demandé" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  let notifications = 0;
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async () => { notifications++; };
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      return { ok: true, status: 200, url, text: async () => amazonFixture("already-requested.html") };
+    }
+    return defaultFetch(url, options);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.items[0].state, "already_requested");
+    assert.equal(notifications, 0);
+    assert.deepEqual(store.localAlerts, undefined);
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
+await test("coupe le cycle après trois erreurs consécutives", async () => {
+  const urls = [
+    URL_A,
+    URL_B,
+    "https://www.amazon.fr/dp/B0ABCDEF04",
+    "https://www.amazon.fr/dp/B0ABCDEF05",
+  ];
+  store.customUrls = urls.map((url, index) => ({ url, name: `Erreur ${index + 1}` }));
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  let amazonFetches = 0;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let timerId = 0;
+  const cancelledTimers = new Set();
+  globalThis.setTimeout = (callback) => {
+    const id = ++timerId;
+    queueMicrotask(() => { if (!cancelledTimers.has(id)) callback(); });
+    return id;
+  };
+  globalThis.clearTimeout = (id) => { cancelledTimers.add(id); };
+  globalThis.fetch = async (url, options = {}) => {
+    if (urls.includes(String(url))) {
+      amazonFetches++;
+      return { ok: false, status: 500, url, text: async () => "" };
+    }
+    return defaultFetch(url, options);
+  };
+
+  try {
+    const res = await dispatch({ type: "check-now" });
+    assert.equal(res.blocked, true);
+    assert.equal(res.haltReason, "consecutive_errors");
+    assert.equal(res.errors, 3);
+    assert.equal(amazonFetches, 3);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
+await test("arrête immédiatement le cycle sur un HTTP 503 Amazon", async () => {
+  store.customUrls = [{ url: URL_A, name: "Indisponible" }, { url: URL_B, name: "Non tenté" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A || url === URL_B) {
+      calls.push(url);
+      return { ok: false, status: 503, url, text: async () => "" };
+    }
+    return defaultFetch(url, options);
+  };
+
   const res = await dispatch({ type: "check-now" });
-  assert.equal(res.ok, true);
-  assert.equal(res.items[0].autoSuccess, true);
-  assert.equal(res.items[0].state, "already_requested");
-  assert.equal(postCount, 1);
-  assert.ok(store.autoSpawnLog?.[URL_A], "le succès doit créer un cooldown");
+
+  assert.equal(res.blocked, true);
+  assert.equal(res.haltReason, "Error: amazon HTTP 503");
+  assert.equal(res.errors, 1);
+  assert.deepEqual(calls, [URL_A]);
 });
 
 await test("un refus Amazon reste visible et ne bloque pas une nouvelle tentative", async () => {

@@ -65,7 +65,7 @@ function startWaveCountdown() {
 }
 
 const STATE_LABELS = {
-  available: { txt: "Dispo à demander", cls: "available" },
+  available: { txt: "Demande ouverte", cls: "available" },
   already_requested: { txt: "Déjà demandée", cls: "already_requested" },
   accepted: { txt: "Sélectionné", cls: "accepted" },
   not_invitation: { txt: "Hors invitation", cls: "not_invitation" },

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.40] — republication de la release
+
+### Changes
+- Incrémente la version destinée au Chrome Web Store après la soumission de la 0.1.39.
+- Signale sur la page des statistiques PrixTCG les produits pour lesquels l’utilisateur a été sélectionné, avec le délai local restant et un accès direct à Amazon.
+
 ## [0.1.39] — alertes d'invitation explicites
 
 ### Fixes

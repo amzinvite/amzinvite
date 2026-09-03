@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const manifest = JSON.parse(readFileSync(new URL("../src/manifest.json", import.meta.url), "utf8"));
-const scripts = manifest.content_scripts.flatMap((entry) => entry.js || []);
-const matches = manifest.content_scripts.flatMap((entry) => entry.matches || []);
+const amazonEntries = manifest.content_scripts.filter((entry) =>
+  (entry.matches || []).some((pattern) => pattern.includes("amazon.")),
+);
+const scripts = amazonEntries.flatMap((entry) => entry.js || []);
+const matches = amazonEntries.flatMap((entry) => entry.matches || []);
 
 assert.deepEqual(scripts, ["content.js"], "seule la détection d'invitation doit rester injectée sur Amazon");
 assert.ok(matches.every((pattern) => pattern.includes("/dp/*") || pattern.includes("/gp/product/*")));

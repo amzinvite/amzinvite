@@ -857,8 +857,12 @@ await test("réserve l'alerte de sélection à un état accepted", async () => {
     assert.equal(res.items[0].state, "accepted");
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].title, "🎉 Tu es sélectionné !");
-    assert.match(notifications[0].message, /clique pour acheter/);
+    assert.match(notifications[0].message, /voir le délai et commander sur Amazon/);
     assert.equal(notifications[0].requireInteraction, true);
+    assert.equal(
+      Object.values(store.notificationUrls)[0],
+      "https://prixtcg.fr/amzinvite/stats?source=amzinvite&utm_source=amzinvite&utm_medium=extension&utm_campaign=selection_notification&asin=B0ABCDEF01",
+    );
   } finally {
     chrome.notifications.create = originalCreate;
   }

@@ -26,6 +26,15 @@ const BOOTSTRAP_PATH = "/api/extension/bootstrap";
 const PUBLIC_WAVES_PATH = "/api/public/waves";
 const FEEDBACK_BATCH_PATH = "/api/extension/feedback/batch";
 const WAVE_STATS_URL = "https://prixtcg.fr/amzinvite/stats?source=amzinvite&utm_source=amzinvite&utm_medium=extension&utm_campaign=wave_notification";
+
+function selectedProductStatsUrl(url) {
+  const asin = asinFromUrl(url);
+  if (!asin) return WAVE_STATS_URL;
+  const destination = new URL(WAVE_STATS_URL);
+  destination.searchParams.set("asin", asin);
+  destination.searchParams.set("utm_campaign", "selection_notification");
+  return destination.toString();
+}
 const MARKETPLACES = Object.freeze({
   "amazon.fr": Object.freeze({
     key: "amazon.fr", code: "FR", origin: "https://www.amazon.fr",
@@ -819,14 +828,14 @@ async function openNotificationProduct(notificationId) {
 }
 
 async function createProductNotification(kind, {
-  url, title, message, priority = 1, imageUrl = null,
+  url, productUrl = url, title, message, priority = 1, imageUrl = null,
 }) {
   if (!url) return;
   const { notificationsEnabled } = await getSettings();
   if (notificationsEnabled) {
-    const notificationId = productNotificationId(kind, url);
+    const notificationId = productNotificationId(kind, productUrl);
     await rememberNotificationUrl(notificationId, url);
-    const iconUrl = await productNotificationIconUrl(url, imageUrl);
+    const iconUrl = await productNotificationIconUrl(productUrl, imageUrl);
     await chrome.notifications.create(notificationId, {
       type: "basic",
       iconUrl,
@@ -2057,9 +2066,10 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         // Notif seulement lors des transitions actionnables pour eviter le spam.
         if (effectiveState === "accepted" && prevState !== "accepted") {
           await createProductNotification("accepted", {
-            url: it.url,
+            url: selectedProductStatsUrl(it.url),
+            productUrl: it.url,
             title: "🎉 Tu es sélectionné !",
-            message: `${it.name || asin} — clique pour acheter (72h max)`,
+            message: `${it.name || asin} — voir le délai et commander sur Amazon`,
             priority: 2,
             imageUrl: productImageUrl,
           });

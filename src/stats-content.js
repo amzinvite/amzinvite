@@ -3,6 +3,7 @@
 
 (function () {
   const WIDGET_CLASS = "amzinvite-selection-callout";
+  const highlightedAsin = new URLSearchParams(location.search).get("asin")?.toUpperCase() || null;
   let countdownTimer = null;
   let renderQueued = false;
 
@@ -67,6 +68,14 @@
     const firstCell = element.matches("tr") ? element.querySelector("td") : null;
     (firstCell || element).appendChild(callout);
     if (expiresAt) callout.dataset.amzinviteExpiresAt = String(expiresAt);
+    if (
+      highlightedAsin === String(element.dataset.amzinviteAsin || "").toUpperCase()
+      && element.getClientRects().length > 0
+    ) {
+      element.style.scrollMarginTop = "96px";
+      element.style.boxShadow = "inset 4px 0 #059669";
+      window.setTimeout(() => element.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
+    }
     return callout;
   }
 

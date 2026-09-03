@@ -11,5 +11,7 @@ assert.match(statsScript, /knownStates\?\.\[key\] !== "accepted"/);
 assert.match(statsScript, /Vous avez été sélectionné !/);
 assert.match(statsScript, /Commander maintenant sur Amazon/);
 assert.match(statsScript, /data-amzinvite-expiry/);
+assert.match(statsScript, /new URLSearchParams\(location\.search\)\.get\("asin"\)/);
+assert.match(statsScript, /scrollIntoView/);
 
 console.log("  ✓ stats PrixTCG : sélections locales et compte à rebours injectés");

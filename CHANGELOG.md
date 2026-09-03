@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.41] — notification de sélection ciblée
+
+### Changes
+- Ouvre la fiche enrichie des statistiques PrixTCG depuis la notification de sélection et met automatiquement le bon produit en évidence.
+
 ## [0.1.40] — republication de la release
 
 ### Changes

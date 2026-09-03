@@ -25,6 +25,9 @@ assert.match(popupJs, /available: \{ txt: "Demande ouverte"/);
 assert.match(contentJs, /label: "Demande ouverte"/);
 assert.match(backgroundJs, /title: "🎟️ Demande d'invitation ouverte"/);
 assert.match(backgroundJs, /title: "🎉 Tu es sélectionné !"/);
+assert.match(backgroundJs, /url: selectedProductStatsUrl\(it\.url\)/);
+assert.match(backgroundJs, /productUrl: it\.url/);
+assert.match(backgroundJs, /utm_campaign", "selection_notification"/);
 for (const source of [popupJs, contentJs, backgroundJs]) {
   assert.doesNotMatch(source, /title:\s*"🎟️ Invitation dispo"/, "le runtime ne doit plus émettre l'ancien titre ambigu");
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.42] — publication Chrome Web Store
+
+### Changes
+- Incrémente la version de l’extension pour permettre une nouvelle soumission sur le Chrome Web Store.
+
 ## [0.1.41] — notification de sélection ciblée
 
 ### Changes

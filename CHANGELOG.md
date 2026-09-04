@@ -4,6 +4,7 @@
 
 ### Changes
 - Ouvre la fiche enrichie des statistiques PrixTCG depuis la notification de sélection et met automatiquement le bon produit en évidence.
+- Affiche une carte de sélection depuis les données locales lorsque le produit n’est pas encore présent dans la vague publique.
 
 ## [0.1.40] — republication de la release
 

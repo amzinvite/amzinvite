@@ -606,6 +606,50 @@ function extractExpiryTextFromHtml(html) {
   return null;
 }
 
+export function parseInvitationRemainingSeconds(expiryText) {
+  const text = String(expiryText || "").toLowerCase().replace(/\u00a0/g, " ");
+  if (!text.trim()) return null;
+  const units = [
+    [/([0-9]+)\s*(?:jours?|days?)/i, 86400],
+    [/([0-9]+)\s*(?:heures?|hours?|hrs?|h)\b/i, 3600],
+    [/([0-9]+)\s*(?:minutes?|mins?|min)\b/i, 60],
+    [/([0-9]+)\s*(?:secondes?|seconds?|secs?|sec)\b/i, 1],
+  ];
+  let total = 0;
+  let matched = false;
+  for (const [pattern, multiplier] of units) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    total += Number(match[1]) * multiplier;
+    matched = true;
+  }
+  return matched && total >= 0 && total <= 72 * 3600 ? total : null;
+}
+
+export function invitationTiming(expiryText, observedAt = Math.floor(Date.now() / 1000)) {
+  const remainingSeconds = parseInvitationRemainingSeconds(expiryText);
+  if (remainingSeconds == null || !Number.isInteger(observedAt) || observedAt <= 0) return {};
+  const expiresAt = observedAt + remainingSeconds;
+  return {
+    invitationRemainingSeconds: remainingSeconds,
+    invitationExpiresAt: expiresAt,
+    invitationGrantedAtEstimated: expiresAt - 72 * 3600,
+  };
+}
+
+export function extractPrimeStatusFromHtml(html) {
+  const text = String(html || "");
+  if (/data-csa-c-content-id=["']nav_cs_primelink_member["']/i.test(text)) return "prime";
+  const match = text.match(/["']isPrimeMember["']\s*:\s*(true|false)/i)
+    || text.match(/&quot;isPrimeMember&quot;\s*:\s*(true|false)/i);
+  if (!match) return "unknown";
+  return match[1].toLowerCase() === "true" ? "prime" : "non_prime";
+}
+
+function normalizePrimeStatus(value) {
+  return ["prime", "non_prime"].includes(value) ? value : "unknown";
+}
+
 async function setKnownExpiry(url, expiryText) {
   const key = productKey(url);
   if (!key) return;
@@ -922,12 +966,15 @@ async function playAlertSound(kind) {
 // ─────────────────────────────────────────────────────────────────────────
 // Feedback anonyme vers notre backend (opt-in)
 // ─────────────────────────────────────────────────────────────────────────
-async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeSource) {
+async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeSource, maybeTelemetry) {
   const calledWithUrl = String(urlOrMarketplace || "").startsWith("http");
   const marketplace = calledWithUrl ? marketplaceFromUrl(urlOrMarketplace) : normalizeAmazonHostname(urlOrMarketplace);
   const asin = calledWithUrl ? asinFromUrl(urlOrMarketplace) : asinOrState;
   const state = calledWithUrl ? asinOrState : stateOrSource;
   const source = calledWithUrl ? (stateOrSource || "bg_check") : (maybeSource || "bg_check");
+  const telemetry = calledWithUrl
+    ? (maybeSource && typeof maybeSource === "object" ? maybeSource : {})
+    : (maybeTelemetry && typeof maybeTelemetry === "object" ? maybeTelemetry : {});
   const { communityDataEnabled } = await getSettings();
   if (!communityDataEnabled || !asin || !marketplace) return;
   const now = Date.now();
@@ -938,7 +985,16 @@ async function sendFeedback(urlOrMarketplace, asinOrState, stateOrSource, maybeS
   if (sentBuckets[dedupeKey]) return { deduped: true };
   try {
     const instanceId = await getInstanceId();
-    const body = JSON.stringify({ marketplace, asin, state, source, observedAt: Math.floor(now / 1000) });
+    const observedAt = Math.floor(now / 1000);
+    const body = JSON.stringify({
+      marketplace,
+      asin,
+      state,
+      source,
+      observedAt,
+      primeStatus: normalizePrimeStatus(telemetry.primeStatus),
+      ...(state === "accepted" ? invitationTiming(telemetry.expiryText, observedAt) : {}),
+    });
     const timeout = withTimeout();
     const response = await authenticatedFetch(`${API_BASE}/api/extension/feedback`, {
       method: "POST",
@@ -986,6 +1042,8 @@ async function sendFeedbackBatch(items, scanSummary = null) {
       state: item.state,
       source,
       observedAt: Math.floor(now / 1000),
+      primeStatus: normalizePrimeStatus(item.primeStatus),
+      ...(item.state === "accepted" ? invitationTiming(item.expiryText, Math.floor(now / 1000)) : {}),
       dedupeKey,
       url: item.url,
     });
@@ -1031,7 +1089,7 @@ async function sendFeedbackBatch(items, scanSummary = null) {
     // Compatibilité avec le backend de production tant que la nouvelle route
     // batch n'est pas déployée : les anciennes routes restent utilisables.
     for (const item of pending.slice(sentCount)) {
-      await sendFeedback(item.url, item.state, item.source);
+      await sendFeedback(item.url, item.state, item.source, item);
     }
     return { fallback: true, error: String(error) };
   }
@@ -1627,9 +1685,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const { text, doc, rawHtml } = extractBuyboxText(html);
         const state = detectInvitationState(text, doc, rawHtml);
         await setKnownState(normalizedUrl, state);
-        await setKnownExpiry(normalizedUrl, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
+        const expiryText = state === "accepted" ? extractExpiryTextFromHtml(html) : null;
+        const primeStatus = extractPrimeStatusFromHtml(html);
+        await setKnownExpiry(normalizedUrl, expiryText);
         await markStateChecked(normalizedUrl);
-        await sendFeedback(normalizedUrl, state, "bg_check");
+        await sendFeedback(normalizedUrl, state, "bg_check", { expiryText, primeStatus });
         await updateActionBadge();
         sendResponse({ ok: true, url: normalizedUrl, state });
       } catch (e) {
@@ -1709,7 +1769,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await Promise.all([
           setKnownState(msg.url, msg.state),
           setKnownExpiry(msg.url, msg.state === "accepted" ? (msg.expiryText || null) : null),
-          sendFeedback(msg.url, msg.state, "manual_visit"),
+          sendFeedback(msg.url, msg.state, "manual_visit", {
+            expiryText: msg.expiryText || null,
+            primeStatus: normalizePrimeStatus(msg.primeStatus),
+          }),
         ]);
       } catch (e) {
         console.warn("[amzinvite] manual visit report failed:", e);
@@ -1885,6 +1948,8 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
   const runKind = !customOnly && !Array.isArray(onlyUrls) ? "full" : "partial";
   const summary = { checked: 0, errors: 0, items: [] };
   const feedbackItems = [];
+  let scanPrimeStatus = "unknown";
+  let scanPrimeConflict = false;
   await chrome.storage.local.set({
     checkProgress: { startedAt: Date.now(), phase: "watchlist", current: 0, total: 0 },
   });
@@ -1996,9 +2061,18 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         const asin = asinFromUrl(it.url);
         const prevState = it.known_state || null;
         await setKnownState(it.url, state);
-        await setKnownExpiry(it.url, state === "accepted" ? extractExpiryTextFromHtml(html) : null);
+        const expiryText = state === "accepted" ? extractExpiryTextFromHtml(html) : null;
+        const primeStatus = extractPrimeStatusFromHtml(html);
+        if (primeStatus !== "unknown" && !scanPrimeConflict) {
+          if (scanPrimeStatus === "unknown") scanPrimeStatus = primeStatus;
+          else if (scanPrimeStatus !== primeStatus) {
+            scanPrimeStatus = "unknown";
+            scanPrimeConflict = true;
+          }
+        }
+        await setKnownExpiry(it.url, expiryText);
         await markStateChecked(it.url);
-        feedbackItems.push({ url: it.url, state, source: "bg_check" });
+        feedbackItems.push({ url: it.url, state, source: "bg_check", expiryText, primeStatus });
         summary.checked++;
         summary.items.push({ url: it.url, state });
         let effectiveState = state;
@@ -2033,7 +2107,17 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
                   if (confirmedState === "accepted") {
                     await setKnownExpiry(it.url, extractExpiryTextFromHtml(confirmationHtml));
                   }
-                  feedbackItems.push({ url: it.url, state: confirmedState, source: "auto_request" });
+                  const confirmationExpiryText = confirmedState === "accepted"
+                    ? extractExpiryTextFromHtml(confirmationHtml)
+                    : null;
+                  const confirmationPrimeStatus = extractPrimeStatusFromHtml(confirmationHtml || html);
+                  feedbackItems.push({
+                    url: it.url,
+                    state: confirmedState,
+                    source: "auto_request",
+                    expiryText: confirmationExpiryText,
+                    primeStatus: confirmationPrimeStatus,
+                  });
                   summary.items[summary.items.length - 1].autoSuccess = true;
                   summary.items[summary.items.length - 1].state = confirmedState;
                   effectiveState = confirmedState;
@@ -2155,6 +2239,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
     startedAt: Math.floor(runStartedAt / 1000),
     completedAt: Math.floor(completedAt / 1000),
     durationMs: completedAt - runStartedAt,
+    primeStatus: scanPrimeStatus,
   } : null;
   await sendFeedbackBatch(feedbackItems, scanSummary);
   const storageUpdate = { lastRun: { ts: completedAt, ...summary } };

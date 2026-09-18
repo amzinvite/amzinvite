@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.43] — télémétrie des invitations
+
+### Features
+- Relève anonymement le statut Amazon Prime (`prime`, `non_prime` ou `unknown`) avec les résultats de détection existants.
+- Enregistre le temps restant affiché pour une invitation acceptée ainsi que ses horaires d’expiration et d’attribution estimée.
+- Ajoute ces informations aux résumés de parcours sans créer de requête réseau supplémentaire.
+
 ## [0.1.42] — publication Chrome Web Store
 
 ### Changes

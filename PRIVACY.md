@@ -30,6 +30,10 @@ Quand l'option de partage anonyme est activée, l'extension peut envoyer :
 - des changements d'état des invitations suivies
 - un résumé technique du cycle (complet ou partiel, résultat, nombre de produits
   parcourus, erreurs, horaires, durée et version de l'extension)
+- le statut Amazon Prime sous une forme limitée à `prime`, `non_prime` ou
+  `unknown`, afin de comparer anonymement les taux de sélection
+- lorsqu'une invitation est acceptée, le temps restant affiché par Amazon et
+  les horaires d'expiration et d'attribution estimée qui en sont déduits
 
 Ces envois sont conçus pour améliorer la qualité du service. Ils n'incluent pas de nom, d'email ou d'informations de paiement.
 

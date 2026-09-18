@@ -37,6 +37,18 @@
     return null;
   }
 
+  function detectPrimeStatus() {
+    const memberLink = document.querySelector('[data-csa-c-content-id="nav_cs_primelink_member"]');
+    if (memberLink) return "prime";
+
+    for (const element of document.querySelectorAll('[data-a-carousel-options*="isPrimeMember"]')) {
+      const raw = element.getAttribute("data-a-carousel-options") || "";
+      const match = raw.match(/"isPrimeMember"\s*:\s*(true|false)/i);
+      if (match) return match[1].toLowerCase() === "true" ? "prime" : "non_prime";
+    }
+    return "unknown";
+  }
+
   function detect() {
     for (const { id, state } of HDP_STATE_BLOCKS) {
       const el = document.getElementById(id);
@@ -185,6 +197,7 @@
   setTimeout(() => {
     try {
       const { state, expiryText } = detect();
+      const primeStatus = detectPrimeStatus();
       const url = canonicalUrl();
 
       if (state === "not_invitation") return;
@@ -202,7 +215,7 @@
       });
 
       chrome.runtime.sendMessage(
-        { type: "report-state", url, state, expiryText },
+        { type: "report-state", url, state, expiryText, primeStatus },
         () => { void chrome.runtime.lastError; },
       );
     } catch (e) {

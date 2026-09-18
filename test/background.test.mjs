@@ -109,6 +109,22 @@ const URL_BE = "https://www.amazon.com.be/dp/B0ABCDEF03";
 const amazonFixture = (name) => readFileSync(new URL(`fixtures/amazon/${name}`, import.meta.url), "utf8")
   .replace("{{PADDING}}", "Contenu produit anonymisé. ".repeat(700));
 
+assert.equal(backgroundModule.parseInvitationRemainingSeconds("14 heures 50 minutes"), 53400);
+assert.equal(backgroundModule.parseInvitationRemainingSeconds("1 jour 2 heures 3 minutes"), 93780);
+assert.equal(backgroundModule.parseInvitationRemainingSeconds("inconnu"), null);
+assert.deepEqual(backgroundModule.invitationTiming("14 heures 50 minutes", 1_789_753_253), {
+  invitationRemainingSeconds: 53400,
+  invitationExpiresAt: 1_789_806_653,
+  invitationGrantedAtEstimated: 1_789_547_453,
+});
+assert.equal(backgroundModule.extractPrimeStatusFromHtml(
+  '<a data-csa-c-content-id="nav_cs_primelink_member">Prime</a>',
+), "prime");
+assert.equal(backgroundModule.extractPrimeStatusFromHtml(
+  '<div data-a-carousel-options="{&quot;isPrimeMember&quot;:false}"></div>',
+), "non_prime");
+assert.equal(backgroundModule.extractPrimeStatusFromHtml("<main>Amazon</main>"), "unknown");
+
 console.log("identifiant d'instance :");
 
 await test("réutilise un seul UUID lors d'appels concurrents au premier lancement", async () => {
@@ -564,6 +580,7 @@ await test("mémorise et transmet un parcours complet réussi sans requête déd
     startedAt: feedbackPayload.scanSummary.startedAt,
     completedAt: feedbackPayload.scanSummary.completedAt,
     durationMs: feedbackPayload.scanSummary.durationMs,
+    primeStatus: "unknown",
   });
   assert.equal(store.lastFullRun.checked, 1);
   assert.equal(store.lastFullRun.expected, 1);

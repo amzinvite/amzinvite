@@ -3,6 +3,7 @@
 
 (function () {
   const WIDGET_CLASS = "amzinvite-selection-callout";
+  const PROVISIONAL_LIST_ID = "amzinvite-provisional-wave-products";
   const highlightedAsin = new URLSearchParams(location.search).get("asin")?.toUpperCase() || null;
   let countdownTimer = null;
   let renderQueued = false;
@@ -58,12 +59,26 @@
     return match?.[1]?.toUpperCase() || null;
   }
 
-  function createFallbackProduct({ asin, marketplace, name, imageUrl }) {
-    if (document.getElementById("amzinvite-selected-product-fallback")) return null;
+  function marketplaceFromItem(item) {
+    const explicit = String(item?.marketplace || "").toLowerCase();
+    if (/^amazon\.(?:fr|com\.be|com)$/.test(explicit)) return explicit;
+    try {
+      const hostname = new URL(String(item?.url || "")).hostname.replace(/^www\./, "").toLowerCase();
+      return /^amazon\.(?:fr|com\.be|com)$/.test(hostname) ? hostname : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function createFallbackProduct({ asin, marketplace, name, imageUrl, container = null, provisional = false }) {
+    const fallbackId = provisional
+      ? `amzinvite-wave-product-${marketplace.replace(/[^a-z0-9]/g, "-")}-${asin}`
+      : "amzinvite-selected-product-fallback";
+    if (document.getElementById(fallbackId)) return null;
     const section = document.querySelector("main section");
     if (!section) return null;
     const product = document.createElement("article");
-    product.id = "amzinvite-selected-product-fallback";
+    product.id = fallbackId;
     product.dataset.amzinviteAsin = asin;
     product.dataset.amzinviteMarketplace = marketplace;
     product.dataset.amzinviteFallback = "true";
@@ -79,14 +94,52 @@
       identity.appendChild(image);
     }
     const label = document.createElement("div");
-    label.textContent = name || asin;
+    label.style.cssText = "display:flex;flex:1;min-width:0;align-items:center;justify-content:space-between;gap:12px";
+    const title = document.createElement("span");
+    title.textContent = name || asin;
+    label.appendChild(title);
+    if (provisional) {
+      const link = document.createElement("a");
+      link.href = `${location.origin}/go/amzinvite/${asin}?source=wave_stats_provisional`;
+      link.target = "_blank";
+      link.rel = "nofollow sponsored noopener";
+      link.textContent = "Voir sur Amazon →";
+      link.style.cssText = "flex-shrink:0;padding:7px 10px;border-radius:8px;background:#047857;color:#fff;text-decoration:none;font-weight:800;font-size:12px";
+      label.appendChild(link);
+    }
     identity.appendChild(label);
     product.appendChild(identity);
 
-    const intro = section.querySelector("h1")?.nextElementSibling;
-    if (intro) intro.insertAdjacentElement("afterend", product);
-    else section.prepend(product);
+    if (container) container.appendChild(product);
+    else {
+      const intro = section.querySelector("h1")?.nextElementSibling;
+      if (intro) intro.insertAdjacentElement("afterend", product);
+      else section.prepend(product);
+    }
     return product;
+  }
+
+  function activeWave(schedule, now = Date.now()) {
+    return (schedule?.waves || []).find(
+      (wave) => Number(wave.starts_at) * 1000 <= now && Number(wave.ends_at) * 1000 > now,
+    ) || null;
+  }
+
+  function renderProvisionalWaveProducts(items) {
+    if (document.getElementById(PROVISIONAL_LIST_ID) || !items.length) return [];
+    const section = document.querySelector("main section");
+    if (!section) return [];
+    const wrapper = document.createElement("div");
+    wrapper.id = PROVISIONAL_LIST_ID;
+    wrapper.style.cssText = "margin-top:20px;padding:16px;border:1px dashed rgba(5,150,105,.45);border-radius:16px;background:rgba(236,253,245,.65)";
+    const heading = document.createElement("div");
+    heading.innerHTML = '<strong style="display:block;color:#064e3b">Produits suivis par votre extension</strong><span style="display:block;margin-top:3px;color:#475569;font-size:12px">Données provisoires : les statistiques de la vague sont en cours de consolidation.</span>';
+    wrapper.appendChild(heading);
+    const list = document.createElement("div");
+    list.style.cssText = "display:grid;gap:10px;margin-top:12px";
+    wrapper.appendChild(list);
+    section.appendChild(wrapper);
+    return items.map((item) => createFallbackProduct({ ...item, container: list, provisional: true })).filter(Boolean);
   }
 
   function createCallout(element, expiryInfo) {
@@ -133,10 +186,26 @@
   }
 
   async function renderSelections() {
-    const elements = [...document.querySelectorAll("[data-amzinvite-asin][data-amzinvite-marketplace]")];
-    const { knownStates, knownExpiry, publicFeed, customUrls, knownImages } = await chrome.storage.local.get([
-      "knownStates", "knownExpiry", "publicFeed", "customUrls", "knownImages",
+    const serverElements = [...document.querySelectorAll("[data-amzinvite-asin][data-amzinvite-marketplace]")]
+      .filter((element) => element.dataset.amzinviteFallback !== "true");
+    const elements = [...serverElements];
+    const { knownStates, knownExpiry, publicFeed, customUrls, knownImages, smartSchedule } = await chrome.storage.local.get([
+      "knownStates", "knownExpiry", "publicFeed", "customUrls", "knownImages", "smartSchedule",
     ]);
+    const provisionalList = document.getElementById(PROVISIONAL_LIST_ID);
+    if (serverElements.length) provisionalList?.remove();
+    else if (activeWave(smartSchedule)) {
+      const seen = new Set();
+      const localItems = [...(customUrls || []), ...(publicFeed || [])].flatMap((item) => {
+        const asin = asinFromItem(item);
+        const marketplace = marketplaceFromItem(item);
+        const key = asin && marketplace ? `${marketplace}:${asin}` : null;
+        if (!key || seen.has(key)) return [];
+        seen.add(key);
+        return [{ asin, marketplace, name: item?.name || asin, imageUrl: knownImages?.[key] || item?.image_url || null }];
+      });
+      elements.push(...renderProvisionalWaveProducts(localItems));
+    }
     if (highlightedAsin && !elements.some((element) => element.dataset.amzinviteAsin?.toUpperCase() === highlightedAsin)) {
       const acceptedKey = Object.keys(knownStates || {}).find(
         (key) => key.endsWith(`:${highlightedAsin}`) && knownStates[key] === "accepted",

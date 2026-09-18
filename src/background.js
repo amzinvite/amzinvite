@@ -55,6 +55,7 @@ const AUTH_V2_STORAGE_KEYS = {
 const authV2RegistrationPromises = new Map();
 const ALARM_NAME = "invitation-check";
 const WAVE_STATS_ALARM_NAME = "wave-stats-check";
+const RECOVERY_ALARM_NAME = "scheduler-recovery";
 const REQUEST_DELAY_MIN_MS = 7_000;
 const REQUEST_DELAY_MAX_MS = 18_000;
 const REQUEST_LONG_PAUSE_MIN_MS = 25_000;
@@ -74,6 +75,8 @@ const WAVE_HEARTBEAT_MAX_MINUTES = 36;
 const WAVE_SCAN_OFFSETS_MIN = Object.freeze([5, 20, 35, 50, 65, 80, 95, 110, 125, 150, 180, 360, 720, 1380]);
 const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
+const MAX_SCAN_RUN_MS = 45 * 60 * 1000;
+const RECOVERY_ALARM_PERIOD_MINUTES = 15;
 const BUYABLE_BADGE_BG = "#1D7A52";
 const MAX_NEW_FEED_NOTIFICATIONS = 3;
 const NEW_FEED_CHECK_MIN_MS = 2 * 60 * 1000;
@@ -1482,6 +1485,23 @@ async function reconcileSmartScheduler({ refresh = false, force = false } = {}) 
   return scheduleAlarm({ force });
 }
 
+async function ensureRecoveryAlarm() {
+  const existing = await chrome.alarms.get(RECOVERY_ALARM_NAME);
+  if (!existing) {
+    await chrome.alarms.create(RECOVERY_ALARM_NAME, { periodInMinutes: RECOVERY_ALARM_PERIOD_MINUTES });
+  }
+}
+
+async function recoverScheduler() {
+  const { checkProgress } = await chrome.storage.local.get("checkProgress");
+  const progressAge = Date.now() - Number(checkProgress?.startedAt || 0);
+  if (checkProgress && progressAge > MAX_SCAN_RUN_MS) {
+    activeRunController?.abort();
+    await chrome.storage.local.remove("checkProgress");
+  }
+  if (!activeRun) await reconcileSmartScheduler({ force: false });
+}
+
 let keepaliveInterval = null;
 function startKeepalive() {
   if (keepaliveInterval) return;
@@ -1594,6 +1614,7 @@ async function checkMarketplaceAuth(marketplace) {
 chrome.runtime.onInstalled.addListener(async (details) => {
   await migrateMarketplaceStorage();
   void scheduleAlarm();
+  void ensureRecoveryAlarm();
   void setupOriginRewrite();
 
   const existing = await chrome.storage.local.get([
@@ -1637,12 +1658,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(() => {
   void migrateMarketplaceStorage();
   void reconcileSmartScheduler({ refresh: true });
+  void ensureRecoveryAlarm();
   setupOriginRewrite();
   updateActionBadge();
 });
 setupOriginRewrite();
 void migrateMarketplaceStorage().then(() => updateActionBadge());
 void scheduleAlarm();
+void ensureRecoveryAlarm();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
@@ -1655,6 +1678,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void refreshBootstrap()
       .catch(() => refreshWaveStatus())
       .finally(() => scheduleWaveStatsAlarm());
+  }
+  if (alarm.name === RECOVERY_ALARM_NAME) {
+    void recoverScheduler().catch((error) => {
+      console.warn("[amzinvite] scheduler recovery failed:", error);
+    });
   }
 });
 
@@ -1748,6 +1776,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const resumeUrls = Array.isArray(stored.checkResume?.urls) ? stored.checkResume.urls : null;
       const result = await runCheck({ force: true, onlyUrls: resumeUrls?.length ? resumeUrls : null });
       return { ok: true, resumed: !!resumeUrls?.length, ...result };
+    })()
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "start-check-now") {
+    (async () => {
+      const now = Date.now();
+      const stored = await chrome.storage.local.get(["manualCheckStartedAt", "checkResume"]);
+      const retryAfterMs = MANUAL_CHECK_COOLDOWN_MS - (now - Number(stored.manualCheckStartedAt || 0));
+      if (retryAfterMs > 0) return { ok: false, error: "cooldown", retryAfterMs };
+      if (activeRun) return { ok: true, alreadyRunning: true };
+      await chrome.storage.local.set({ manualCheckStartedAt: now });
+      const resumeUrls = Array.isArray(stored.checkResume?.urls) ? stored.checkResume.urls : null;
+      void runCheck({ force: true, onlyUrls: resumeUrls?.length ? resumeUrls : null })
+        .catch((error) => console.warn("[amzinvite] manual check failed:", error));
+      return { ok: true, started: true, resumed: !!resumeUrls?.length };
     })()
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
@@ -1974,7 +2019,10 @@ async function runCheck({ force = false, scheduled = false, customOnly = false, 
   if (activeRun) return activeRun;
   startKeepalive();
   activeRunController = new AbortController();
+  const controller = activeRunController;
+  const watchdog = setTimeout(() => controller.abort(), MAX_SCAN_RUN_MS);
   activeRun = runCheckOnce({ force, scheduled, customOnly, onlyUrls, signal: activeRunController.signal }).finally(async () => {
+    clearTimeout(watchdog);
     await chrome.storage.local.remove("checkProgress");
     activeRun = null;
     activeRunController = null;

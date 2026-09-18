@@ -15,5 +15,9 @@ assert.match(statsScript, /new URLSearchParams\(location\.search\)\.get\("asin"\
 assert.match(statsScript, /scrollIntoView/);
 assert.match(statsScript, /amzinvite-selected-product-fallback/);
 assert.match(statsScript, /element\.dataset\.amzinviteFallback === "true"/);
+assert.match(statsScript, /amzinvite-provisional-wave-products/);
+assert.match(statsScript, /Données provisoires/);
+assert.match(statsScript, /activeWave\(smartSchedule\)/);
+assert.match(statsScript, /serverElements\.length/);
 
 console.log("  ✓ stats PrixTCG : sélections locales et compte à rebours injectés");

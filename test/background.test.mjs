@@ -993,9 +993,13 @@ await test("coupe le cycle après trois erreurs consécutives", async () => {
   const originalClearTimeout = globalThis.clearTimeout;
   let timerId = 0;
   const cancelledTimers = new Set();
-  globalThis.setTimeout = (callback) => {
+  globalThis.setTimeout = (callback, delay = 0) => {
     const id = ++timerId;
-    queueMicrotask(() => { if (!cancelledTimers.has(id)) callback(); });
+    // Accélère les pauses inter-produits sans déclencher le watchdog global
+    // de 45 minutes ajouté pour les vrais workers bloqués.
+    if (delay < 45 * 60 * 1000) {
+      queueMicrotask(() => { if (!cancelledTimers.has(id)) callback(); });
+    }
     return id;
   };
   globalThis.clearTimeout = (id) => { cancelledTimers.add(id); };

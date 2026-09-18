@@ -30,6 +30,7 @@
     const asin = asinFromAmazonUrl(amazonUrl);
     if (!asin) return null;
     const url = new URL(`/r/amzinvite/${encodeURIComponent(asin)}`, PRIXTCG_BASE);
+    url.searchParams.set("resolver", "2");
     return addTracking(url, "product");
   }
 

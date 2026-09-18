@@ -9,6 +9,12 @@
 - Pilote le compte à rebours depuis le planning serveur, y compris pour une vague manuelle modifiable, et affiche le temps restant d’une vague déjà en cours.
 - Notifie une seule fois au démarrage ou à la resynchronisation lorsqu’une vague est déjà en cours.
 
+### Fixes
+- Acquitte immédiatement « Vérifier maintenant » au lieu de garder le canal du popup ouvert pendant tout le scan.
+- Relance automatiquement la planification toutes les quinze minutes si Chrome a suspendu le service worker au milieu d’un contrôle.
+- Coupe un scan réellement bloqué après quarante-cinq minutes et affiche une erreur si le worker ne répond pas au popup.
+- Invalide les anciennes redirections PrixTCG mises en cache afin qu’un ASIN nouvellement rattaché ouvre sa fiche exacte.
+
 ## [0.1.42] — publication Chrome Web Store
 
 ### Changes

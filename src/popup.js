@@ -78,8 +78,35 @@ const STATE_LABELS = {
   stub_no_data: { txt: "À revérifier", cls: "unknown" },
 };
 
-async function sendMessage(message) {
-  return new Promise((resolve) => chrome.runtime.sendMessage(message, resolve));
+async function sendMessage(message, timeoutMs = 8_000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(value);
+    };
+    const timeout = setTimeout(() => finish({
+      ok: false,
+      error: "Le service AmzInvite ne répond pas. Le worker va être relancé automatiquement ; réessaie dans quelques secondes.",
+    }), timeoutMs);
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        const error = chrome.runtime.lastError;
+        if (error || response == null) {
+          finish({
+            ok: false,
+            error: `Le service AmzInvite ne répond pas. Recharge l’extension dans chrome://extensions. Détail : ${error?.message || "aucune réponse du service"}`,
+          });
+          return;
+        }
+        finish(response);
+      });
+    } catch (error) {
+      finish({ ok: false, error: String(error.message || error) });
+    }
+  });
 }
 
 function setVal(id, val) {
@@ -1116,13 +1143,15 @@ $("check").addEventListener("click", async () => {
 
   chrome.storage.onChanged.addListener(storageListener);
   const timeoutHandle = setTimeout(finalize, CHECK_BUTTON_TIMEOUT_MS);
-  chrome.runtime.sendMessage({ type: "check-now" }, (response) => {
-    void chrome.runtime.lastError;
+  const response = await sendMessage({ type: "start-check-now" });
+  if (!response?.ok) {
     if (response?.error === "cooldown") {
       setError(`Patiente ${Math.max(1, Math.ceil(Number(response.retryAfterMs || 0) / 1000))} s avant de relancer.`);
+    } else {
+      setError(response?.error || "Impossible de lancer le contrôle.");
     }
-    finalize();
-  });
+    await finalize();
+  }
 });
 
 document.querySelectorAll(".stat[data-filter]").forEach((el) => {

@@ -222,6 +222,35 @@ await test("ne notifie qu'une fois la même vague finalisée", async () => {
   }
 });
 
+await test("notifie une seule fois une vague en cours après synchronisation", async () => {
+  let notifications = 0;
+  const originalCreate = chrome.notifications.create;
+  chrome.notifications.create = async () => { notifications++; };
+  const now = Date.parse("2026-09-18T10:00:00Z");
+  const schedule = {
+    version: "manual-test",
+    timezone: "Europe/Paris",
+    waves: [{
+      id: "manual-active",
+      starts_at: now / 1000 - 3600,
+      ends_at: now / 1000 + 23 * 3600,
+      label: "Vague exceptionnelle",
+      source: "manual",
+    }],
+  };
+  try {
+    const first = await backgroundModule.notifyActiveWave(schedule, now);
+    const second = await backgroundModule.notifyActiveWave(schedule, now);
+    assert.equal(first.sent, true);
+    assert.equal(second.deduped, true);
+    assert.equal(notifications, 1);
+    assert.equal(store.lastNotifiedActiveWaveId, "manual-active");
+    assert.equal(store.localAlerts[0].kind, "wave_active");
+  } finally {
+    chrome.notifications.create = originalCreate;
+  }
+});
+
 await test("conserve l'alerte interne quand les notifications natives sont désactivées", async () => {
   let notifications = 0;
   const originalCreate = chrome.notifications.create;

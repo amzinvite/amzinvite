@@ -7,6 +7,7 @@
 - Enregistre le temps restant affiché pour une invitation acceptée ainsi que ses horaires d’expiration et d’attribution estimée.
 - Ajoute ces informations aux résumés de parcours sans créer de requête réseau supplémentaire.
 - Pilote le compte à rebours depuis le planning serveur, y compris pour une vague manuelle modifiable, et affiche le temps restant d’une vague déjà en cours.
+- Notifie une seule fois au démarrage ou à la resynchronisation lorsqu’une vague est déjà en cours.
 
 ## [0.1.42] — publication Chrome Web Store
 

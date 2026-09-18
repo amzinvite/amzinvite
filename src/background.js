@@ -424,6 +424,7 @@ export async function refreshBootstrap() {
     latestFinalizedWave: payload.latest_finalized_wave || null,
   });
   await notifyNewPublicFeedItems(previousFeed || [], payload.invitations, { canNotify: !!publicFeedFetchedAt });
+  await notifyActiveWave(schedule);
   if (payload.latest_finalized_wave) {
     if (bootstrapFetchedAt) {
       await notifyFinalizedWave(payload.latest_finalized_wave);
@@ -921,6 +922,43 @@ export async function notifyFinalizedWave(wave) {
   });
   await chrome.storage.local.set({ lastNotifiedFinalizedWaveId: String(wave.id) });
   return { sent: true, native: notificationsEnabled };
+}
+
+function activeWaveMessage(wave, now = Date.now()) {
+  const remainingMinutes = Math.max(1, Math.ceil((Number(wave.ends_at) * 1000 - now) / 60000));
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+  const remaining = hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+  const label = String(wave.label || "Vague d’invitations").trim();
+  return `${label} · fin estimée dans ${remaining}. Le contrôle Amazon va être lancé.`;
+}
+
+export async function notifyActiveWave(scheduleValue, now = Date.now()) {
+  const schedule = normalizedSmartSchedule(scheduleValue, now);
+  const activeWave = schedule.waves
+    .filter((wave) => Number(wave.starts_at) * 1000 <= now && Number(wave.ends_at) * 1000 > now)
+    .sort((left, right) => Number(right.starts_at) - Number(left.starts_at))[0];
+  if (!activeWave) return { skipped: true };
+  const { lastNotifiedActiveWaveId } = await chrome.storage.local.get("lastNotifiedActiveWaveId");
+  if (String(lastNotifiedActiveWaveId || "") === String(activeWave.id)) return { deduped: true };
+
+  const notificationId = `wave-active-${activeWave.id}`;
+  const title = "🌊 Une vague d’invitations est en cours";
+  const message = activeWaveMessage(activeWave, now);
+  const { notificationsEnabled } = await getSettings();
+  if (notificationsEnabled) {
+    await rememberNotificationUrl(notificationId, WAVE_STATS_URL);
+    await chrome.notifications.create(notificationId, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title,
+      message,
+      priority: 2,
+    });
+  }
+  await recordLocalAlert({ kind: "wave_active", title, message, url: WAVE_STATS_URL });
+  await chrome.storage.local.set({ lastNotifiedActiveWaveId: String(activeWave.id) });
+  return { sent: true, native: notificationsEnabled, wave: activeWave };
 }
 
 async function scheduleWaveStatsAlarm(scheduleValue = null) {

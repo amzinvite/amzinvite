@@ -14,6 +14,7 @@
 - Relance automatiquement la planification toutes les quinze minutes si Chrome a suspendu le service worker au milieu d’un contrôle.
 - Coupe un scan réellement bloqué après quarante-cinq minutes et affiche une erreur si le worker ne répond pas au popup.
 - Invalide les anciennes redirections PrixTCG mises en cache afin qu’un ASIN nouvellement rattaché ouvre sa fiche exacte.
+- Affiche immédiatement les produits du feed local sur une page de vague encore vide, avec un marquage provisoire et sans doublon dès l’arrivée des statistiques serveur.
 
 ## [0.1.42] — publication Chrome Web Store
 

@@ -174,6 +174,28 @@
         border-color: color-mix(in srgb, var(--red, #ef4444) 30%, var(--border));
         color: var(--red, #ef4444);
       }
+      .prime-badge {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 2px 1px;
+        color: #0878b9;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        text-transform: none;
+      }
+      .prime-badge::after {
+        content: "";
+        position: absolute;
+        right: 1px;
+        bottom: 0;
+        width: 12px;
+        height: 3px;
+        border-bottom: 1.5px solid currentColor;
+        border-radius: 0 0 50% 50%;
+        transform: rotate(-8deg);
+      }
       h1 {
         margin: 0;
         font-size: 14px;
@@ -238,6 +260,27 @@
         display: grid;
         gap: 6px;
       }
+      .status-collapse-toggle {
+        display: flex;
+        width: 100%;
+        min-height: 26px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 3px 8px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+      }
+      .status-collapse-toggle:hover { background: var(--gray-bg); transform: none; }
+      .status-collapse-toggle svg { width: 14px; height: 14px; transition: transform .15s ease; }
+      .status-wrap.collapsed .status-collapse-toggle svg { transform: rotate(-90deg); }
+      .status-details { display: grid; gap: 6px; }
+      .status-wrap.collapsed .status-details { display: none; }
       .status-line {
         display: flex;
         align-items: center;
@@ -1157,16 +1200,22 @@
           <div class="stat active" data-filter="all"><span class="n" id="stat-total">—</span><span class="l">Suivis</span></div>
         </div>
 
-        <div class="status-wrap">
-          <div class="status-line full-run" id="last-full-run">Dernier scan complet : aucun</div>
-          <div class="status-line" id="next-check">Prochaine action automatique : —</div>
-          <div class="wave-countdown" id="wave-countdown">
-            <span class="wave-countdown-icon" aria-hidden="true">🌊</span>
-            <span class="wave-countdown-main" id="wave-countdown-main">Prochaine vague estimée : —</span>
-            <span class="wave-countdown-detail">
-              <span id="wave-countdown-detail">Basé sur les vagues détectées par amzinvite</span>
-              <a href="https://prixtcg.fr/amzinvite/stats?source=amzinvite&amp;utm_source=amzinvite&amp;utm_medium=extension&amp;utm_campaign=wave_countdown" target="_blank" rel="noopener noreferrer">Voir les stats ↗</a>
-            </span>
+        <div class="status-wrap" id="monitoring-status">
+          <button class="status-collapse-toggle" id="toggle-monitoring-status" type="button" aria-expanded="true" aria-controls="monitoring-status-details">
+            <span>Suivi automatique</span>
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="status-details" id="monitoring-status-details">
+            <div class="status-line full-run" id="last-full-run">Dernier scan complet : aucun</div>
+            <div class="status-line" id="next-check">Prochaine action automatique : —</div>
+            <div class="wave-countdown" id="wave-countdown">
+              <span class="wave-countdown-icon" aria-hidden="true">🌊</span>
+              <span class="wave-countdown-main" id="wave-countdown-main">Prochaine vague estimée : —</span>
+              <span class="wave-countdown-detail">
+                <span id="wave-countdown-detail">Basé sur les vagues détectées par amzinvite</span>
+                <a href="https://prixtcg.fr/amzinvite/stats?source=amzinvite&amp;utm_source=amzinvite&amp;utm_medium=extension&amp;utm_campaign=wave_countdown" target="_blank" rel="noopener noreferrer">Voir les stats ↗</a>
+              </span>
+            </div>
           </div>
         </div>
 

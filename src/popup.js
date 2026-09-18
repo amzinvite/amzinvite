@@ -271,7 +271,7 @@ async function renderAmazonStatus() {
   const warn = $("amazon-warn");
   const panel = $("amazon-status-panel");
   try {
-    const cfg = await chrome.storage.local.get(["trackPokemonTcgFr", "customUrls"]);
+    const cfg = await chrome.storage.local.get(["trackPokemonTcgFr", "customUrls", "amazonPrimeByMarketplace"]);
     const active = [];
     if (cfg.trackPokemonTcgFr !== false) active.push("amazon.fr");
     const hasBelgianProduct = (cfg.customUrls || []).some((entry) => {
@@ -291,13 +291,16 @@ async function renderAmazonStatus() {
     };
     const symbol = (status) => status === "connected" ? "●" : status === "disconnected" ? "○" : "?";
     const label = (status) => status === "connected" ? "Connecté" : status === "disconnected" ? "Non connecté" : "À vérifier";
+    const primeBadge = (key) => statuses[key] === "connected" && cfg.amazonPrimeByMarketplace?.[key]?.status === "prime"
+      ? '<span class="prime-badge" aria-label="Membre Amazon Prime" title="Membre Amazon Prime">prime</span>'
+      : "";
     if (active.length === 0) {
       el.textContent = "○ Suivi désactivé";
     } else if (active.length === 1) {
       const key = active[0];
-      el.textContent = `${symbol(statuses[key])} ${label(statuses[key])} ${meta[key][0]}`;
+      el.innerHTML = `<span>${symbol(statuses[key])} ${label(statuses[key])} ${meta[key][0]}</span>${primeBadge(key)}`;
     } else {
-      el.textContent = active.map((key) => `${symbol(statuses[key])} ${meta[key][0]}`).join(" · ");
+      el.innerHTML = active.map((key) => `<span>${symbol(statuses[key])} ${meta[key][0]}</span>${primeBadge(key)}`).join(" · ");
     }
     const values = active.map((key) => statuses[key]);
     el.className = `eyebrow ${active.length === 0 || values.some((v) => v === "unknown") ? "" : values.every((v) => v === "connected") ? "connected" : "disconnected"}`;
@@ -371,6 +374,22 @@ const VIEW_ICON_COMPACT = `<svg viewBox="0 0 16 16" fill="none"><path d="M3 4h10
 const VIEW_ICON_COMFORT = `<svg viewBox="0 0 16 16" fill="none"><rect x="2.2" y="2.8" width="11.6" height="4.4" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="8.8" width="11.6" height="4.4" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>`;
 
 let compactView = false;
+let monitoringStatusCollapsed = false;
+
+function setMonitoringStatusCollapsed(collapsed) {
+  monitoringStatusCollapsed = !!collapsed;
+  const wrap = $("monitoring-status");
+  const button = $("toggle-monitoring-status");
+  wrap.classList.toggle("collapsed", monitoringStatusCollapsed);
+  button.setAttribute("aria-expanded", String(!monitoringStatusCollapsed));
+  button.title = monitoringStatusCollapsed ? "Déplier le suivi automatique" : "Replier le suivi automatique";
+}
+
+async function applyMonitoringStatusCollapsed(collapsed) {
+  setMonitoringStatusCollapsed(collapsed);
+  await chrome.storage.local.set({ monitoringStatusCollapsed: !!collapsed });
+}
+
 function setViewMode(compact) {
   compactView = !!compact;
   $("list").classList.toggle("compact", compactView);
@@ -412,6 +431,7 @@ async function load() {
     "soundEnabled",
     "notificationsEnabled",
     "compactMode",
+    "monitoringStatusCollapsed",
     "telemetryEnabled",
     "scrapeEnabled",
     "lastRun",
@@ -433,6 +453,7 @@ async function load() {
   setChecked("soundEnabled", cfg.soundEnabled == null ? true : cfg.soundEnabled);
   setChecked("notificationsEnabled", cfg.notificationsEnabled == null ? true : cfg.notificationsEnabled);
   setViewMode(!!cfg.compactMode);
+  setMonitoringStatusCollapsed(!!cfg.monitoringStatusCollapsed);
   startWaveCountdown();
   renderAutoRequestNote();
   renderAutoRequestPrompt(cfg);
@@ -530,6 +551,7 @@ function startProgressListener() {
     }
     if (changes.lastFullRun) renderLastFullRun(changes.lastFullRun.newValue);
     if (changes.localAlerts) void renderLocalAlerts();
+    if (changes.amazonPrimeByMarketplace) void renderAmazonStatus();
   });
 }
 
@@ -1061,6 +1083,9 @@ $("notificationsEnabled").addEventListener("change", async () => {
 });
 
 $("toggle-view").addEventListener("click", () => { void applyViewMode(!compactView); });
+$("toggle-monitoring-status").addEventListener("click", () => {
+  void applyMonitoringStatusCollapsed(!monitoringStatusCollapsed);
+});
 
 $("export").addEventListener("click", async () => {
   setError("");

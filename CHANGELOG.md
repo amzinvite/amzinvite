@@ -15,6 +15,8 @@
 - Coupe un scan réellement bloqué après quarante-cinq minutes et affiche une erreur si le worker ne répond pas au popup.
 - Invalide les anciennes redirections PrixTCG mises en cache afin qu’un ASIN nouvellement rattaché ouvre sa fiche exacte.
 - Affiche immédiatement les produits du feed local sur une page de vague encore vide, avec un marquage provisoire et sans doublon dès l’arrivée des statistiques serveur.
+- Permet de replier le bloc « suivi automatique » et mémorise ce choix.
+- Affiche le badge Prime près du statut Amazon uniquement après une détection fiable sur les produits, puis le retire si un scan complet ne confirme plus Prime.
 
 ## [0.1.42] — publication Chrome Web Store
 

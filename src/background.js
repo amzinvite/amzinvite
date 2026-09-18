@@ -656,6 +656,25 @@ function normalizePrimeStatus(value) {
   return ["prime", "non_prime"].includes(value) ? value : "unknown";
 }
 
+async function setMarketplacePrimeStatus(marketplace, value) {
+  if (!MARKETPLACES[marketplace]) return;
+  const status = normalizePrimeStatus(value);
+  const { amazonPrimeByMarketplace } = await chrome.storage.local.get("amazonPrimeByMarketplace");
+  await chrome.storage.local.set({
+    amazonPrimeByMarketplace: {
+      ...(amazonPrimeByMarketplace || {}),
+      [marketplace]: { status, checkedAt: Date.now() },
+    },
+  });
+}
+
+async function setPrimeStatusFromProduct(url, value, { clearUnknown = false } = {}) {
+  const status = normalizePrimeStatus(value);
+  if (status === "unknown" && !clearUnknown) return;
+  const marketplace = marketplaceFromUrl(url);
+  if (marketplace) await setMarketplacePrimeStatus(marketplace, status);
+}
+
 async function setKnownExpiry(url, expiryText) {
   const key = productKey(url);
   if (!key) return;
@@ -1755,6 +1774,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await setKnownState(normalizedUrl, state);
         const expiryText = state === "accepted" ? extractExpiryTextFromHtml(html) : null;
         const primeStatus = extractPrimeStatusFromHtml(html);
+        await setPrimeStatusFromProduct(normalizedUrl, primeStatus);
         await setKnownExpiry(normalizedUrl, expiryText);
         await markStateChecked(normalizedUrl);
         await sendFeedback(normalizedUrl, state, "bg_check", { expiryText, primeStatus });
@@ -1854,6 +1874,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await Promise.all([
           setKnownState(msg.url, msg.state),
           setKnownExpiry(msg.url, msg.state === "accepted" ? (msg.expiryText || null) : null),
+          setPrimeStatusFromProduct(msg.url, msg.primeStatus),
           sendFeedback(msg.url, msg.state, "manual_visit", {
             expiryText: msg.expiryText || null,
             primeStatus: normalizePrimeStatus(msg.primeStatus),
@@ -2038,6 +2059,7 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
   const feedbackItems = [];
   let scanPrimeStatus = "unknown";
   let scanPrimeConflict = false;
+  const scanPrimeStatusesByMarketplace = new Map();
   await chrome.storage.local.set({
     checkProgress: { startedAt: Date.now(), phase: "watchlist", current: 0, total: 0 },
   });
@@ -2151,6 +2173,11 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         await setKnownState(it.url, state);
         const expiryText = state === "accepted" ? extractExpiryTextFromHtml(html) : null;
         const primeStatus = extractPrimeStatusFromHtml(html);
+        const marketplace = marketplaceFromUrl(it.url);
+        if (marketplace && primeStatus !== "unknown") {
+          if (!scanPrimeStatusesByMarketplace.has(marketplace)) scanPrimeStatusesByMarketplace.set(marketplace, new Set());
+          scanPrimeStatusesByMarketplace.get(marketplace).add(primeStatus);
+        }
         if (primeStatus !== "unknown" && !scanPrimeConflict) {
           if (scanPrimeStatus === "unknown") scanPrimeStatus = primeStatus;
           else if (scanPrimeStatus !== primeStatus) {
@@ -2339,6 +2366,12 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
       errors: 0,
       durationMs: completedAt - runStartedAt,
     };
+    const scannedMarketplaces = new Set(watchlist.map((item) => marketplaceFromUrl(item.url)).filter(Boolean));
+    for (const marketplace of scannedMarketplaces) {
+      const statuses = scanPrimeStatusesByMarketplace.get(marketplace) || new Set();
+      const status = statuses.size === 1 ? [...statuses][0] : "unknown";
+      await setMarketplacePrimeStatus(marketplace, status);
+    }
   }
   await chrome.storage.local.set(storageUpdate);
   await chrome.storage.local.remove("checkProgress");

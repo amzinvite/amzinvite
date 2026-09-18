@@ -614,6 +614,34 @@ await test("mémorise et transmet un parcours complet réussi sans requête déd
   assert.equal(store.lastFullRun.checked, 1);
   assert.equal(store.lastFullRun.expected, 1);
   assert.equal(store.lastFullRun.errors, 0);
+  assert.equal(store.amazonPrimeByMarketplace["amazon.fr"].status, "unknown");
+});
+
+await test("affiche Prime après détection puis le retire si le scan complet ne le confirme plus", async () => {
+  store.customUrls = [{ url: URL_A, name: "Fixture Prime" }];
+  store.trackPokemonTcgFr = false;
+  store.communityDataEnabled = false;
+  let prime = true;
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === URL_A) {
+      const marker = prime ? '<a data-csa-c-content-id="nav_cs_primelink_member">Prime</a>' : "";
+      return {
+        ok: true,
+        status: 200,
+        url,
+        text: async () => `${amazonFixture("normal-product.html")}${marker}`,
+      };
+    }
+    return defaultFetch(url, options);
+  };
+
+  await dispatch({ type: "check-now" });
+  assert.equal(store.amazonPrimeByMarketplace["amazon.fr"].status, "prime");
+
+  prime = false;
+  store.manualCheckStartedAt = Date.now() - 16_000;
+  await dispatch({ type: "check-now" });
+  assert.equal(store.amazonPrimeByMarketplace["amazon.fr"].status, "unknown");
 });
 
 await test("annule un check en cours et nettoie sa progression", async () => {

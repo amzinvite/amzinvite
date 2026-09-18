@@ -13,6 +13,8 @@ assert.match(popup, /id="alerts-toggle"/);
 assert.match(popup, /id="alerts-list"/);
 assert.match(popupJs, /matchesProductSearch/);
 assert.match(popupJs, /renderLocalAlerts/);
+assert.match(popupJs, /Vague en cours · fin dans/);
+assert.match(popupJs, /reconcile-scheduler", refresh: true/);
 assert.match(popupJs, /class="alert-entry-icon"/);
 assert.match(popupJs, /class="alert-entry-content"/);
 assert.match(popup, /\.alert-entry-content \{ display: flex; min-width: 0; flex-direction: column; gap: 3px; \}/);

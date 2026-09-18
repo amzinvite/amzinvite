@@ -227,6 +227,8 @@ function normalizedSmartSchedule(value, nowMs = Date.now()) {
         id: String(wave.id || wave.starts_at),
         starts_at: Number(wave.starts_at),
         ends_at: Number(wave.ends_at || Number(wave.starts_at) + 86400),
+        label: typeof wave.label === "string" ? wave.label.slice(0, 80) : "",
+        source: wave.source === "manual" ? "manual" : "scheduled",
       }))
       .filter((wave) => Number.isFinite(wave.starts_at) && Number.isFinite(wave.ends_at)),
     scan_offsets_minutes: Array.isArray(value.scan_offsets_minutes) && value.scan_offsets_minutes.length

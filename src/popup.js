@@ -35,13 +35,16 @@ async function renderWaveCountdown() {
   if (!main || !detail) return;
   const now = Date.now();
   const { smartSchedule } = await chrome.storage.local.get("smartSchedule");
-  const serverWave = (smartSchedule?.waves || [])
-    .filter((entry) => Number(entry.starts_at) * 1000 > now)
-    .sort((left, right) => Number(left.starts_at) - Number(right.starts_at))[0];
+  const serverWaves = (smartSchedule?.waves || [])
+    .filter((entry) => Number(entry.ends_at) * 1000 > now)
+    .sort((left, right) => Number(left.starts_at) - Number(right.starts_at));
+  const serverWave = serverWaves.find((entry) => Number(entry.starts_at) * 1000 <= now)
+    || serverWaves[0];
+  const active = serverWave && Number(serverWave.starts_at) * 1000 <= now;
   const wave = serverWave
     ? {
-        at: Number(serverWave.starts_at) * 1000,
-        label: new Intl.DateTimeFormat("fr-FR", {
+        at: Number(active ? serverWave.ends_at : serverWave.starts_at) * 1000,
+        label: serverWave.label || new Intl.DateTimeFormat("fr-FR", {
           timeZone: smartSchedule.timezone || "Europe/Paris",
           weekday: "long",
           hour: "2-digit",
@@ -54,7 +57,9 @@ async function renderWaveCountdown() {
     return;
   }
   const remaining = AmzinvitePopupState.formatWaveCountdown(wave.at - Date.now());
-  main.textContent = `Prochaine vague estimée dans ${remaining}`;
+  main.textContent = active
+    ? `Vague en cours · fin dans ${remaining}`
+    : `Prochaine vague estimée dans ${remaining}`;
   detail.textContent = wave.label;
 }
 
@@ -371,7 +376,7 @@ async function persistSettings({ reschedule = false } = {}) {
 }
 
 async function load() {
-  void sendMessage({ type: "reconcile-scheduler" });
+  await sendMessage({ type: "reconcile-scheduler", refresh: true });
   const manifest = chrome.runtime.getManifest?.();
   const cfg = await chrome.storage.local.get([
     "autoRequest",

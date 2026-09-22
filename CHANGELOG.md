@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.44] — applications PrixTCG
+
+### Features
+- Répartit le bandeau inférieur en trois accès : application iOS, comparateur PrixTCG et bêta Android.
+- Ajoute une page guidée pour rejoindre le groupe de testeurs Android puis activer le test Google Play avec le même compte Google.
+
 ## [0.1.43] — télémétrie des invitations
 
 ### Features

@@ -46,7 +46,18 @@ assert.match(popup, /class="mini-actions settings-links"/);
 assert.doesNotMatch(popup, /class="footer-actions"/);
 assert.doesNotMatch(popup, /id="intervalMin"/, "l'intervalle manuel doit disparaître des réglages");
 assert.match(popup, /Surveillance intelligente/);
-assert.match(popup, /class="fixed-footer">\s*<a class="prixtcg-persistent-link"/);
+assert.match(popup, /class="fixed-footer">\s*<nav class="prixtcg-footer-links"/);
+const footer = popup.match(/<nav class="prixtcg-footer-links"[^>]*>([\s\S]*?)<\/nav>/)?.[1];
+assert.ok(footer, "le bandeau doit proposer les accès PrixTCG");
+assert.deepEqual(
+  [...footer.matchAll(/<a class="prixtcg-persistent-link" href="([^"]+)"/g)].map((match) => match[1].split("?")[0]),
+  [
+    "https://apps.apple.com/fr/app/prixtcg-trouve-le-bon-prix/id6808370800",
+    "https://prixtcg.fr/pokemon/catalogue",
+    "android-beta.html",
+  ],
+  "le bandeau doit proposer iOS, le comparateur et la bêta Android dans cet ordre",
+);
 assert.equal(
   popup.match(/href="https:\/\/prixtcg\.fr\/pokemon\/catalogue\?source=amzinvite&amp;utm_source=amzinvite&amp;utm_medium=extension&amp;utm_campaign=popup"/g)?.length,
   2,

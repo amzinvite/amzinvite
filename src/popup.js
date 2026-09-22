@@ -651,6 +651,7 @@ function scheduledActionLabel(reason) {
   if (reason === "bootstrap_sync" || reason === "wave_feed_sync") return "Prochaine synchronisation";
   if (reason === "custom_safety") return "Prochain contrôle des liens manuels";
   if (reason === "new_feed_check") return "Prochain contrôle du nouveau produit";
+  if (reason === "daily_check") return "Prochain contrôle quotidien Amazon";
   if (reason === "wave_catchup" || reason === "wave_late_catchup") return "Prochain contrôle Amazon (rattrapage)";
   if (reason === "wave_check") return "Prochain contrôle Amazon";
   return "Prochaine action auto";

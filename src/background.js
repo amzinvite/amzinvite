@@ -77,6 +77,11 @@ const STUB_MIN_BYTES = 15_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const MAX_SCAN_RUN_MS = 45 * 60 * 1000;
 const RECOVERY_ALARM_PERIOD_MINUTES = 15;
+const DAILY_SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DAILY_SCAN_CATCHUP_MIN_MS = 2 * 60 * 1000;
+const DAILY_SCAN_CATCHUP_MAX_MS = 10 * 60 * 1000;
+const DAILY_SCAN_RETRY_MIN_MS = 60 * 60 * 1000;
+const DAILY_SCAN_RETRY_MAX_MS = 90 * 60 * 1000;
 const BUYABLE_BADGE_BG = "#1D7A52";
 const MAX_NEW_FEED_NOTIFICATIONS = 3;
 const NEW_FEED_CHECK_MIN_MS = 2 * 60 * 1000;
@@ -1157,6 +1162,11 @@ async function sendFeedbackBatch(items, scanSummary = null) {
   }
 }
 
+export function shouldSendScanFeedback(state, previousState, source = "bg_check") {
+  if (source === "auto_request") return true;
+  return state === "accepted" || state !== previousState;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Auto-request d'invitation — POST direct à Amazon (opt-in)
 // Voir docs/ARCHITECTURE.md pour le reverse-engineering complet
@@ -1310,7 +1320,8 @@ export async function scheduleAlarm({ force = false } = {}) {
   if (!force && existingAlarm?.scheduledTime > Date.now() + 15_000) return existingAlarm;
 
   const stored = await chrome.storage.local.get([
-    "smartSchedule", "schedulerState", "bootstrapFetchedAt", "customUrls", "lastRun", "pendingNewFeedUrls",
+    "smartSchedule", "schedulerState", "bootstrapFetchedAt", "customUrls", "lastRun", "lastFullRun",
+    "pendingNewFeedUrls",
   ]);
   const now = Date.now();
   const schedule = normalizedSmartSchedule(stored.smartSchedule, now);
@@ -1332,6 +1343,30 @@ export async function scheduleAlarm({ force = false } = {}) {
     reason: "bootstrap_sync",
     when: nextSyncAt > now ? nextSyncAt : now + secureRandomInt(30, 120) * 1000,
   });
+
+  const activeWave = schedule.waves.some((wave) => (
+    now >= Number(wave.starts_at) * 1000 && now < Number(wave.ends_at) * 1000
+  ));
+  if (!activeWave) {
+    const lastSuccessfulFullScanAt = Math.max(
+      Number(state.lastDailyScanAt || 0),
+      Number(stored.lastFullRun?.ts || 0),
+    );
+    const normalDueAt = lastSuccessfulFullScanAt > 0
+      ? lastSuccessfulFullScanAt + DAILY_SCAN_INTERVAL_MS
+      : 0;
+    const retryAt = Number(state.nextDailyRetryAt || 0);
+    const dailyDueAt = retryAt > now
+      ? retryAt
+      : normalDueAt > now
+        ? normalDueAt
+        : now + secureRandomInt(DAILY_SCAN_CATCHUP_MIN_MS, DAILY_SCAN_CATCHUP_MAX_MS);
+    candidates.push({
+      id: "daily-check",
+      reason: "daily_check",
+      when: dailyDueAt,
+    });
+  }
 
   if ((stored.customUrls || []).length) {
     const customDue = Number(state.lastCustomCheckAt || 0) + schedule.custom_interval_minutes * 60000;
@@ -1488,6 +1523,18 @@ async function schedulerTick() {
     }
   } else if (plan.reason === "custom_safety") {
     await runCheck({ scheduled: true, customOnly: true });
+  } else if (plan.reason === "daily_check") {
+    const result = await runCheck({ scheduled: true });
+    const { schedulerState } = await chrome.storage.local.get("schedulerState");
+    const nextState = { ...(schedulerState || {}) };
+    if (!result.cancelled && !result.blocked && Number(result.errors || 0) === 0) {
+      nextState.lastDailyScanAt = Date.now();
+      delete nextState.nextDailyRetryAt;
+    } else {
+      nextState.nextDailyRetryAt = Date.now()
+        + secureRandomInt(DAILY_SCAN_RETRY_MIN_MS, DAILY_SCAN_RETRY_MAX_MS);
+    }
+    await chrome.storage.local.set({ schedulerState: nextState });
   }
   await markSchedulerJobsCompleted(plan);
   await scheduleAlarm({ force: true });
@@ -2187,7 +2234,9 @@ async function runCheckOnce({ force = false, scheduled = false, customOnly = fal
         }
         await setKnownExpiry(it.url, expiryText);
         await markStateChecked(it.url);
-        feedbackItems.push({ url: it.url, state, source: "bg_check", expiryText, primeStatus });
+        if (shouldSendScanFeedback(state, prevState, "bg_check")) {
+          feedbackItems.push({ url: it.url, state, source: "bg_check", expiryText, primeStatus });
+        }
         summary.checked++;
         summary.items.push({ url: it.url, state });
         let effectiveState = state;

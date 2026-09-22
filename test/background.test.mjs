@@ -124,6 +124,11 @@ assert.equal(backgroundModule.extractPrimeStatusFromHtml(
   '<div data-a-carousel-options="{&quot;isPrimeMember&quot;:false}"></div>',
 ), "non_prime");
 assert.equal(backgroundModule.extractPrimeStatusFromHtml("<main>Amazon</main>"), "unknown");
+assert.equal(backgroundModule.shouldSendScanFeedback("already_requested", "already_requested"), false);
+assert.equal(backgroundModule.shouldSendScanFeedback("not_invitation", "not_invitation"), false);
+assert.equal(backgroundModule.shouldSendScanFeedback("available", "not_invitation"), true);
+assert.equal(backgroundModule.shouldSendScanFeedback("accepted", "accepted"), true);
+assert.equal(backgroundModule.shouldSendScanFeedback("already_requested", "already_requested", "auto_request"), true);
 
 console.log("identifiant d'instance :");
 
@@ -189,6 +194,7 @@ await test("planifie seulement le nouveau produit quelques minutes après sa dé
   const now = Date.now();
   store.trackPokemonTcgFr = true;
   store.bootstrapFetchedAt = now;
+  store.lastFullRun = { ts: now };
   store.pendingNewFeedUrls = [URL_A];
   store.schedulerState = { newFeedCheckAt: now + 3 * 60000 };
   store.smartSchedule = {
@@ -202,6 +208,43 @@ await test("planifie seulement le nouveau produit quelques minutes après sa dé
   await backgroundModule.scheduleAlarm({ force: true });
   assert.equal(store.schedulerPlan.reason, "new_feed_check");
   assert.equal(store.schedulerPlan.when, store.schedulerState.newFeedCheckAt);
+});
+
+await test("planifie un scan quotidien hors vague", async () => {
+  const now = Date.now();
+  store.trackPokemonTcgFr = true;
+  store.bootstrapFetchedAt = now;
+  store.lastFullRun = { ts: now - 25 * 3600000 };
+  store.smartSchedule = {
+    version: "test",
+    waves: [],
+    scan_offsets_minutes: [5, 35],
+    jitter_minutes: 0,
+    sync_interval_minutes: 360,
+    custom_interval_minutes: 360,
+  };
+  await backgroundModule.scheduleAlarm({ force: true });
+  assert.equal(store.schedulerPlan.reason, "daily_check");
+  assert.ok(store.schedulerPlan.when >= now + 2 * 60000);
+  assert.ok(store.schedulerPlan.when <= now + 10 * 60000);
+});
+
+await test("ne double pas un scan complet récent avec le scan quotidien", async () => {
+  const now = Date.now();
+  store.trackPokemonTcgFr = true;
+  store.bootstrapFetchedAt = now;
+  store.lastFullRun = { ts: now - 2 * 3600000 };
+  store.smartSchedule = {
+    version: "test",
+    waves: [],
+    scan_offsets_minutes: [5, 35],
+    jitter_minutes: 0,
+    sync_interval_minutes: 360,
+    custom_interval_minutes: 360,
+  };
+  await backgroundModule.scheduleAlarm({ force: true });
+  assert.equal(store.schedulerPlan.reason, "bootstrap_sync");
+  assert.ok(store.schedulerPlan.when < store.lastFullRun.ts + 24 * 3600000);
 });
 
 await test("ne notifie qu'une fois la même vague finalisée", async () => {
